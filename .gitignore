@@ -1,0 +1,28 @@
+# Separate repo — already pushed to its own GitHub remote (avenir-hie)
+odc_new_ui/
+
+# Secrets — never commit
+.env
+
+# Python
+__pycache__/
+*.pyc
+catboost_info/
+
+# Logs
+*.log
+
+# Node (frontend deps + build output — rebuilt via `npm install` / `npm run build`)
+ui/node_modules/
+ui/dist/
+
+# Raw source data too large for GitHub (>100MB hard limit) and not read at
+# runtime by api.py — only used by the one-time aggregate.py ETL script.
+# Their built outputs (agg_*.parquet) ARE committed and are what api.py reads.
+final_malaria_data.csv
+agg_ward.csv
+
+# Editor/IDE
+.claude/
+*_log.txt
+*_dev.log

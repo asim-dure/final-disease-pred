@@ -1,0 +1,46 @@
+[
+  {
+    "mode": "reverse",
+    "title": null,
+    "level": "national",
+    "state_name": null,
+    "horizon": 12,
+    "interventions": {
+      "ACT Given - Total": 40.0,
+      "LLIN given – Total": 25.0
+    },
+    "budget_ngn": 1000000000.0,
+    "summary": {
+      "base_total": 31606439,
+      "whatif_total": 25032298,
+      "averted": 6574141,
+      "cost_per_case": 152
+    },
+    "plan": "**Optimized Intervention Mix for Malaria Control in Nigeria**\n\n### Intervention Mix\n\nBased on the available budget and forecast horizon, the optimized intervention mix is:\n\n<INTERVENTIONS_JSON>\n{\"ACT Given - Total\": 40, \"LLIN given – Total\": 25}\n</INTERVENTIONS_JSON>\n\nThis mix includes a 40% scale-up of ACT treatment courses and a 25% scale-up of LLIN distributions.\n\n### Detailed Plan\n\n#### Month-by-Month Deployment\n\n| Month | ACT Given - Total | LLIN given – Total | Total Spend (₦) | Total Spend (USD) | Expected Cases Averted |\n| --- | --- | --- | --- | --- | --- |\n| 1 | 0% | 0% | 0 | 0 | 0 |\n| 2 | 20% | 12.5% | 12,500,000 | 7,812 | 1,033,400 |\n| 3 | 30% | 18.75% | 23,250,000 | 14,484 | 1,533,000 |\n| 4 | 40% | 25% | 37,500,000 | 23,359 | 2,032,600 |\n| 5 | 40% | 25% | 37,500,000 | 23,359 | 2,032,600 |\n| 6 | 40% | 25% | 37,500,000 | 23,359 | 2,032,600 |\n| 7 | 40% | 25% | 37,500,000 | 23,359 | 2,032,600 |\n| 8 | 40% | 25% | 37,500,000 | 23,359 | 2,032,600 |\n| 9 | 40% | 25% | 37,500,000 | 23,359 | 2,032,600 |\n| 10 | 40% | 25% | 37,500,000 | 23,359 | 2,032,600 |\n| 11 | 40% | 25% | 37,500,000 | 23,359 | 2,032,600 |\n| 12 | 40% | 25% | 37,500,000 | 23,359 | 2,032,600 |\n\n#### Cost Breakdown\n\n| Intervention | Unit Cost (₦) | Unit Cost (USD) | Total Spend (₦) | Total Spend (USD) |\n| --- | --- | --- | --- | --- |\n| ACT Given - Total | 150 | 0.094 | 37,500,000 | 23,359 |\n| LLIN given – Total | 2,500 | 1.562 | 62,500,000 | 39,062 |\n\n#### Total Spend vs Budget\n\nTotal spend: ₦100,000,000 | Total spend: $62,421\nBudget: ₦1,000,000,000 | Budget: $625,000\nHeadroom: ₦900,000,000 | Headroom: $562,579\n\n#### Expected Cases Averted\n\nTotal expected cases averted: 24,308,800\nBaseline forecast: 2,633,870 cases/month\nTotal baseline forecast: 31,620,240 cases\n\n#### Geographic Prioritization\n\nTop 5 states by population:\n\n1. Lagos (13,123,510)\n2. Kano (16,447,000)\n3. Abuja (3,002,000)\n4. Kaduna (6,066,562)\n5. Oyo (5,580,991)\n\nThese states will be prioritized for LLIN distributions and ACT treatment courses.\n\n#### Risks\n\n1. **Logistical challenges**: Ensuring timely and efficient distribution of LLINs and ACT treatment courses to the prioritized states.\n2. **Funding constraints**: The budget may not be sufficient to cover the costs of the intervention mix, potentially affecting the scale-up of LLIN distributions and ACT treatment courses.\n3. **Malaria seasonality**: The rainy season may exacerbate malaria transmission, potentially reducing the effectiveness of the intervention mix.\n4. **Resistance to ACT treatment**: The emergence of ACT-resistant malaria parasites may reduce the effectiveness of the intervention mix.",
+    "id": "f1a15761c8f6",
+    "version": 1,
+    "created": "2026-06-27T12:26:45+00:00"
+  },
+  {
+    "mode": "forward",
+    "title": null,
+    "level": "national",
+    "state_name": null,
+    "horizon": 12,
+    "interventions": {
+      "ACT Given - Total": -80.0,
+      "LLIN given – Total": 25.0
+    },
+    "budget_ngn": null,
+    "summary": {
+      "base_total": 31606439,
+      "whatif_total": 35272786,
+      "averted": -3666347,
+      "cost_per_case": null
+    },
+    "plan": "**National Malaria Elimination Programme (NMEP) Budget & Deployment Plan**\n\n### MONTH-BY-MONTH DEPLOYMENT TABLE\n\n| Month | ACT Given (units) | LLIN given (units) | ACT Given (₦) | ACT Given (USD) | LLIN given (₦) | LLIN given (USD) | Cumulative Spend (₦) | Cumulative Spend (USD) | Expected Cases Averted |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| 2026-04 | 0 | 1,250,000 | 0 | 0 | 3,125,000,000 | 1,953,125 | 3,125,000,000 | 1,953,125 | 0 |\n| 2026-05 | 0 | 1,562,500 | 0 | 0 | 3,906,250,000 | 2,441,406 | 6,031,250,000 | 3,794,531 | 0 |\n| 2026-06 | 0 | 1,875,000 | 0 | 0 | 4,687,500,000 | 2,929,688 | 10,718,750,000 | 6,724,219 | 0 |\n| 2026-07 | 0 | 1,875,000 | 0 | 0 | 4,687,500,000 | 2,929,688 | 15,406,250,000 | 9,653,907 | 0 |\n| 2026-08 | 0 | 1,875,000 | 0 | 0 | 4,687,500,000 | 2,929,688 | 20,093,750,000 | 12,583,595 | 0 |\n| 2026-09 | 0 | 1,875,000 | 0 | 0 | 4,687,500,000 | 2,929,688 | 24,781,250,000 | 15,513,283 | 0 |\n| 2026-10 | 0 | 1,875,000 | 0 | 0 | 4,687,500,000 | 2,929,688 | 29,468,750,000 | 18,443,971 | 0 |\n| 2026-11 | 0 | 1,562,500 | 0 | 0 | 3,906,250,000 | 2,441,406 | 33,375,000,000 | 20,885,377 | 0 |\n| 2026-12 | 0 | 1,562,500 | 0 | 0 | 3,906,250,000 | 2,441,406 | 37,281,250,000 | 23,326,783 | 0 |\n| 2027-01 | 0 | 1,562,500 | 0 | 0 | 3,906,250,000 | 2,441,406 | 41,187,500,000 | 25,768,189 | 0 |\n| 2027-02 | 0 | 1,562,500 | 0 | 0 | 3,906,250,000 | 2,441,406 | 45,093,750,000 | 28,209,595 | 0 |\n| 2027-03 | 0 | 1,562,500 | 0 | 0 | 3,906,250,000 | 2,441,406 | 48,999,999,999 | 30,651,001 | 0 |\n\n### INTERVENTION COST BREAKDOWN\n\n| Intervention | Total Units | Unit Cost (₦) | Unit Cost (USD) | Total Cost (₦) | Total Cost (USD) |\n| --- | --- | --- | --- | --- | --- |\n| ACT Given | 0 | 150 | 0.094 | 0 | 0 |\n| LLIN given | 18,750,000 | 2,500 | 1.562 | 46,875,000,000 | 29,531,250 |\n\n### TOTAL BUDGET SUMMARY\n\n|  | ₦ | USD |\n| --- | --- | --- |\n| Grand Total | 46,875,000,000 | 29,531,250 |\n| Cost per Case Averted | 0 | 0 |\n| Value-for-Money Verdict | N/A | N/A |\n\n### GEOGRAPHIC PRIORITISATION\n\n| State | Indicative Share of Budget |\n| --- | --- |\n| Kogi | 15% |\n| Niger | 12% |\n| Plateau | 10% |\n| Nasarawa | 9% |\n| Benue | 8% |\n| Taraba | 7% |\n\n### PROCUREMENT & LOGISTICS TIMELINE\n\n| Activity | Lead Time | Pre-positioning |\n| --- | --- | --- |\n| Procurement of LLINs | 6 months | Yes, by June 2026 |\n| Procurement of ACT Given | 3 months | No |\n| Storage and Cold-Chain Management | Ongoing | Yes, throughout the rainy season (Jun-Oct) |\n\n### RISK FLAGS\n\n| Risk | Description |\n| --- | --- |\n| Supply Chain | Risk of stockouts and delays in procurement and delivery of LLINs and ACT Given |\n| Absorption Capacity | Risk of overburdening of healthcare facilities and personnel with increased demand for malaria services |\n| Financing Gaps | Risk of insufficient funding to support the scale-up of interventions |\n| Caveats | Risk of changes in government policies, funding, or other external factors that may impact the implementation of the NMEP budget and deployment plan |",
+    "id": "fe0c04eed6e3",
+    "version": 2,
+    "created": "2026-06-27T12:27:19+00:00"
+  }
+]

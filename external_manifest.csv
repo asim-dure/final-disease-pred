@@ -1,0 +1,21 @@
+column,description,resolution,provenance,nonnull_pct_2023plus
+ndvi,"FEWS NET satellite NDVI (per LGA, monthly)",LGA-month,fetched (your CSV + OCHA crosswalk),88
+ndvi_anom,NDVI anomaly vs LGA seasonal normal,LGA-month,fetched,88
+enso_oni,NOAA Niño-3.4 ONI (ENSO),national-month,fetched (NOAA CPC),83
+iod_dmi,NOAA Indian Ocean Dipole Mode Index,national-month,fetched (NOAA PSL),58
+elevation,SRTM 30m elevation at LGA centroid,LGA-static,fetched (OpenTopoData),100
+area_sqkm,LGA area,LGA-static,fetched (OCHA admin-2),100
+latitude,LGA centroid latitude (N–S gradient),LGA-static,fetched (OCHA admin-2),100
+pop_density,Population per km² (population / area),LGA-year,derived (population ÷ area),100
+pfpr,Malaria Atlas Project PfPR 2-10 (modelled prevalence),LGA-static,"fetched (MAP WMS, 2024)",100
+poverty_mpi_h,MPI multidimensional poverty headcount,state→LGA,fetched (OPHI/NBS MPI 2019),99
+dep_schooling,Deprivation: years of schooling (education),state→LGA,fetched (OPHI MPI),99
+dep_electricity,Deprivation: electricity access,state→LGA,fetched (OPHI MPI),99
+dep_water,Deprivation: drinking water,state→LGA,fetched (OPHI MPI),99
+dep_housing,Deprivation: housing quality,state→LGA,fetched (OPHI MPI),99
+pfpr,Malaria Atlas Project PfPR 2-10 (modelled prevalence),LGA-static,"fetched (MAP WMS, 2024)",100
+poverty_mpi_h,MPI multidimensional poverty headcount,state→LGA,fetched (OPHI/NBS MPI 2019),100
+dep_schooling,Deprivation: years of schooling (education),state→LGA,fetched (OPHI MPI),100
+dep_electricity,Deprivation: electricity access,state→LGA,fetched (OPHI MPI),100
+dep_water,Deprivation: drinking water,state→LGA,fetched (OPHI MPI),100
+dep_housing,Deprivation: housing quality,state→LGA,fetched (OPHI MPI),100

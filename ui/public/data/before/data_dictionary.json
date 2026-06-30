@@ -1,0 +1,62 @@
+[
+ {
+  "field": "Confirmed cases",
+  "agg": "SUM",
+  "desc": "MAL - Malaria cases confirmed (number) — the target"
+ },
+ {
+  "field": "Total reported",
+  "agg": "SUM",
+  "desc": "Confirmed + presumed malaria cases"
+ },
+ {
+  "field": "RDT tested",
+  "agg": "SUM",
+  "desc": "Malaria cases tested with rapid diagnostic test"
+ },
+ {
+  "field": "ACT given",
+  "agg": "SUM",
+  "desc": "Artemisinin-based combination therapy courses dispensed"
+ },
+ {
+  "field": "LLINs given",
+  "agg": "SUM",
+  "desc": "Long-lasting insecticidal nets distributed"
+ },
+ {
+  "field": "Fever RDT %",
+  "agg": "MEAN",
+  "desc": "Share of fever cases tested with RDT"
+ },
+ {
+  "field": "Rainfall (mm/d)",
+  "agg": "MEAN",
+  "desc": "Monthly mean daily rainfall"
+ },
+ {
+  "field": "Temp (°C)",
+  "agg": "MEAN",
+  "desc": "Mean temperature"
+ },
+ {
+  "field": "Humidity %",
+  "agg": "MEAN",
+  "desc": "Relative humidity"
+ },
+ {
+  "field": "Population",
+  "agg": "derived",
+  "desc": "NPC-projected state population split to LGA by facility share"
+ },
+ {
+  "field": "Incidence/1k",
+  "agg": "derived",
+  "desc": "Confirmed cases ÷ population × 1,000 (monthly)"
+ },
+ {
+  "field": "Facilities",
+  "agg": "COUNT",
+  "desc": "Number of reporting facilities aggregated"
+ }
+]
