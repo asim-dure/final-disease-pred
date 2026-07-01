@@ -35,6 +35,15 @@ except Exception as _ews_err:
     import logging as _log
     _log.warning(f"EWS NLP routes not loaded: {_ews_err}")
 
+# Facility drill-down routes (/api/facilities, /api/facility-risk) — the Visual
+# Overview's per-LGA facility panel. Same in-process mount, no new port.
+try:
+    from facility_api import facility_router
+    app.include_router(facility_router)
+except Exception as _fac_err:
+    import logging as _log
+    _log.warning(f"Facility routes not loaded: {_fac_err}")
+
 # ── load dataset once ────────────────────────────────────────────────────────
 _DF: pd.DataFrame = None
 
@@ -850,6 +859,172 @@ Use markdown tables with a header row and a `---` separator row (proper GitHub-f
         temperature=0.3,
     )
     return {"comparison": resp.choices[0].message.content}
+
+
+# ── comparative benchmarking (LGA vs peers vs state vs national) ────────────
+class BenchmarkReq(BaseModel):
+    disease: str = "malaria"
+    target: str
+    state_name: str
+    lgas: List[str] = []        # peer LGAs to compare (within state_name)
+    horizon_months: int = 12
+    self_lga: Optional[str] = None  # the "home" LGA the user is benchmarking, if any
+
+
+def _fetch_lga_series(disease: str, target: str) -> pd.DataFrame:
+    """[state, lga, year, month, value] for every LGA nationally -- the
+    common input both the chart data and the indicator-options list need."""
+    if disease == "malaria":
+        df = get_df()
+        if target not in df.columns:
+            raise HTTPException(400, f"Unknown target '{target}' for malaria")
+        return df[["state", "lga", "year", "month", target]].rename(columns={target: "value"})
+    return ewc.fetch_fact_series(disease, target, level="lga")
+
+
+@app.get("/api/benchmark/options")
+def benchmark_options(disease: str = "malaria", state_name: str = ""):
+    """Indicator choices + the LGA list for a given state, so the frontend's
+    indicator dropdown and peer-LGA picker are populated from real data."""
+    meta = get_meta(disease)
+    targets = meta["targets"] or meta["all_numeric"][:1]
+    if not targets:
+        raise HTTPException(400, f"No comparable indicator available for '{disease}'")
+    target = targets[0]
+    lga_df = _fetch_lga_series(disease, target)
+    lgas = sorted(lga_df[lga_df["state"] == state_name]["lga"].dropna().unique().tolist()) if state_name else []
+    return {"targets": targets, "lgas": lgas}
+
+
+@app.post("/api/benchmark")
+def benchmark(req: BenchmarkReq):
+    lga_all = _fetch_lga_series(req.disease, req.target)
+    lga_all = lga_all.dropna(subset=["value"])
+    lga_all["date"] = lga_all["year"].astype(str) + "-" + lga_all["month"].astype(str).str.zfill(2)
+
+    national_avg = (lga_all.groupby("date")["value"].mean()
+                     .reset_index().rename(columns={"value": "National Average"}))
+    state_sub = lga_all[lga_all["state"] == req.state_name]
+    if state_sub.empty:
+        raise HTTPException(400, f"No data for state '{req.state_name}' in disease '{req.disease}'")
+    state_avg = (state_sub.groupby("date")["value"].mean()
+                  .reset_index().rename(columns={"value": "State Average"}))
+
+    out = national_avg.merge(state_avg, on="date", how="outer")
+    for lga in req.lgas:
+        s = (state_sub[state_sub["lga"] == lga].groupby("date")["value"].sum()
+             .reset_index().rename(columns={"value": lga}))
+        out = out.merge(s, on="date", how="outer")
+
+    out = out.sort_values("date").reset_index(drop=True)
+    # Trim trailing months with no real reported data (e.g. a parquet's date
+    # range can extend past the last actually-reported month, leaving zero/NaN
+    # placeholder rows) -- horizon should reflect the most recent REAL data,
+    # not those placeholders. Mirrors trim_trailing_zeros()'s logic above.
+    nonzero = out.index[out["State Average"].fillna(0) > 0]
+    if len(nonzero):
+        out = out.loc[: nonzero[-1]]
+    out = out.fillna(0)
+    if req.horizon_months:
+        out = out.tail(req.horizon_months)
+
+    series_cols = [c for c in out.columns if c != "date"]
+    return {
+        "dates": out["date"].tolist(),
+        "series": {c: [round(float(v), 2) for v in out[c].tolist()] for c in series_cols},
+        "lga_options": sorted(state_sub["lga"].dropna().unique().tolist()),
+    }
+
+
+class BenchmarkInsightReq(BaseModel):
+    disease: str = "malaria"
+    target: str
+    state_name: str
+    lgas: List[str]
+    dates: List[str]
+    series: Dict[str, List[float]]
+    budget_context: Optional[str] = None  # free-text, e.g. a selected proposal's summary
+
+
+@app.post("/api/benchmark-insight")
+def benchmark_insight(req: BenchmarkInsightReq):
+    load_dotenv(override=True)
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "GROQ_API_KEY not set in .env")
+    from groq import Groq
+    client = Groq(api_key=api_key)
+
+    label = _disease_label(req.disease)
+    cols = list(req.series.keys())
+    rows = []
+    for i, d in enumerate(req.dates[-12:], start=max(0, len(req.dates) - 12)):
+        row = ", ".join(f"{c}={req.series[c][i]:.1f}" for c in cols if i < len(req.series.get(c, [])))
+        rows.append(f"{d}: {row}")
+    table_text = "\n".join(rows)
+    budget_line = f"\nBudget context the user is planning against: {req.budget_context}" if req.budget_context else ""
+    lga_list = ", ".join(req.lgas) if req.lgas else "(none selected -- compare state vs national only)"
+
+    prompt = f"""You are a public health budget/program advisor for Nigeria's FMOH.
+Disease: {label}. Indicator: {req.target}. State: {req.state_name}.
+Selected LGA(s) for comparison: {lga_list}
+Monthly comparison data (last up to 12 months, LGA value(s) vs State Average vs National Average):
+{table_text}{budget_line}
+
+Write a concise (under 200 words) comparative benchmarking insight covering:
+1. How the selected LGA(s) perform vs the state and national averages (better/worse, and by roughly how much).
+2. Likely contributing factors worth investigating -- grounded only in the numbers above, never invented.
+3. One or two concrete, actionable budget/intervention planning recommendations specific to these LGAs.
+Reference the actual figures shown. Do not cite any data not present above."""
+
+    resp = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=600,
+        temperature=0.3,
+    )
+    return {"insight": resp.choices[0].message.content}
+
+
+# ── News & Intervention Alerts (autonomous, no user-configured rules) ───────
+# Read-only feed: posts are fetched/classified entirely by news_pipeline.py,
+# run on a schedule external to this API process (run_news_scheduler.py or
+# OS cron calling `python news_pipeline.py`). These routes only ever READ
+# news_alerts.json and, for ops/testing, allow forcing one pipeline pass --
+# there is deliberately no per-post/per-rule user configuration here.
+@app.get("/api/news-alerts")
+def list_news_alerts(disease: Optional[str] = None, severity: Optional[str] = None,
+                      alert_worthy_only: bool = True, limit: int = 50):
+    import news_store
+    items = news_store.load_alerts()
+    if alert_worthy_only:
+        items = [a for a in items if a.get("is_alert_worthy")]
+    if disease:
+        items = [a for a in items if a.get("disease") == disease]
+    if severity:
+        items = [a for a in items if a.get("severity") == severity]
+    return items[:limit]
+
+
+@app.get("/api/news-outbreaks")
+def list_news_outbreaks(disease: Optional[str] = None):
+    """Consolidated outbreak-intelligence objects -- one per outbreak (not
+    per weekly report), each with a stitched multi-week trajectory and a
+    single rich AI planning brief. This is the primary view the dashboard
+    renders; /api/news-alerts remains the raw per-report feed."""
+    import news_store
+    items = news_store.load_outbreaks()
+    if disease:
+        items = [o for o in items if o.get("disease") == disease]
+    return items
+
+
+@app.post("/api/news-alerts/run-now")
+def run_news_pipeline_now():
+    """Manual trigger for ops/testing only -- not exposed as an end-user
+    action; the pipeline otherwise runs purely on its own schedule."""
+    from news_pipeline import run_once
+    return run_once()
 
 
 if __name__ == "__main__":

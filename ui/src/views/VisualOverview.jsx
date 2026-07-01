@@ -5,6 +5,7 @@ import { Map } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { Card, InfoTip } from '../components'
 import { fmt, COLORS } from '../lib'
+import FacilityPanel from './FacilityPanel'
 
 const BASE = import.meta.env.BASE_URL || '/'
 const CARTO = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
@@ -378,6 +379,11 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
         </div>
       </Card>
 
+      {scope === 'lgas' && selKey && selKey.includes('|||') && (
+        <FacilityPanel disease={disease} stateName={selKey.split('|||')[0]} lga={selKey.split('|||')[1]} selMonth={curMonth}
+          lgaBurden={scoreFor(selKey)} lgaZone={scoreToZone(scoreFor(selKey) ?? 0)} />
+      )}
+
       {sel && (
         <Card style={{ marginTop: 18 }} title={`${scope === 'states' ? selKey : selKey.split('|||')[1]} — precomputed snapshot`}
           sub={hasHistory && curMonth ? curMonth.label : (sel.year && sel.month ? `${sel.year}-${String(sel.month).padStart(2, '0')}` : 'latest available')}>
@@ -727,6 +733,12 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
           </Card>
         </div>
       </div>
+
+      {/* ── FACILITY DRILL-DOWN (one level below the selected LGA) ── */}
+      {scope === 'lgas' && selKey && selKey.includes('|||') && (
+        <FacilityPanel disease={disease} stateName={selKey.split('|||')[0]} lga={selKey.split('|||')[1]} selMonth={curMonth}
+          lgaBurden={dispZ[selKey]?.display} lgaZone={dispZ[selKey]?.zone} />
+      )}
 
       {/* ── CALCULATION BREAKDOWN ── */}
       {sel && selDetail && selZ && (

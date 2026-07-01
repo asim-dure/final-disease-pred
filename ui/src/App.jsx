@@ -10,6 +10,8 @@ import Methodology from './views/Methodology'
 import WhatIfLab from './views/WhatIfLab'
 import VisualOverview from './views/VisualOverview'
 import DataNotes from './views/DataNotes'
+import Benchmarking from './views/Benchmarking'
+import Dashboard from './views/Dashboard'
 
 // Minister-facing sidebar: two plain-language groups always open, plus a
 // "Deep Dive" group for technical/model-internals sections, collapsed by default.
@@ -19,7 +21,14 @@ import DataNotes from './views/DataNotes'
 // malaria's full sidebar renders unchanged, while thinner diseases simply omit
 // items their data can't support — never a disabled/greyed-out item.
 function buildNavGroups(label, caps) {
-  const overviewItems = [{ id: 'visual', label: 'Visual Overview', ico: '🗺️' }]
+  // Forecastive "Dashboard" always leads the disease's overview group, sitting
+  // directly above the (descriptive) Visual Overview. Every disease has the
+  // national/state/meta series it needs, so it's not capability-gated — it just
+  // degrades to an honest "no forecast yet" banner for diseases like TB.
+  const overviewItems = [
+    { id: 'dashboard', label: 'Dashboard', ico: '📈' },
+    { id: 'visual', label: 'Visual Overview', ico: '🗺️' },
+  ]
   // 'visuallga' (a separate "All-LGA Hotspot Map" item rendering VisualOverview
   // with allLgas) is hidden from the nav -- Visual Overview's own State/LGA
   // scope toggle already covers it, so a second nav entry for the same map is
@@ -30,10 +39,14 @@ function buildNavGroups(label, caps) {
   if (caps.simulator) interventionItems.push({ id: 'simulator', label: 'What-If Simulator', ico: '🎛️' })
   if (caps.whatiflab) interventionItems.push({ id: 'whatiflab', label: 'What-If Lab', ico: '🔬' })
 
+  const insightItems = []
+  if (caps.benchmarking) insightItems.push({ id: 'benchmarking', label: 'AI Insights & Benchmarking', ico: '📈' })
+
   const groups = [
     { id: 'g-overview', label: `${label} Overview`, items: overviewItems },
   ]
   if (interventionItems.length) groups.push({ id: 'g-intervention', label: 'Intervention Planning', items: interventionItems })
+  if (insightItems.length) groups.push({ id: 'g-insights', label: 'AI Insights & Benchmarking', items: insightItems })
   return groups
 }
 
@@ -55,6 +68,7 @@ function buildDeepDiveItems(caps, disease) {
 const MALARIA_CAPS = {
   overview: true, hotspot_map: true, forecast: true, simulator: true,
   whatiflab: true, data_explorer: true, methodology: true, model_lab: true,
+  benchmarking: true,
 }
 
 const GROUP_ICONS = { malaria: '🦟', hiv: '🩸', tb: '🫁', ncd: '🩺', ntd: '🪱' }
@@ -95,7 +109,10 @@ export default function App() {
   // load the disease list once on mount — until it resolves, only malaria's
   // tab renders (today's exact UI), so there's never a layout flash.
   useEffect(() => {
-    fetch('/api/diseases').then(r => r.json()).then(setDiseases).catch(() => setDiseases(null))
+    fetch('/api/diseases')
+      .then(r => r.json())
+      .then(d => setDiseases(Array.isArray(d) ? d : null))
+      .catch(() => setDiseases(null))
   }, [])
 
   const activeCfg = diseases?.find(d => d.id === disease)
@@ -174,6 +191,7 @@ export default function App() {
       <main className="main">
         {err && <div className="loading" style={{ color: '#e11d48' }}>Failed to load data: {err}</div>}
         {!data && !err && <div className="loading"><div className="spinner" />Loading data…</div>}
+        {data && view === 'dashboard' && <Dashboard data={data} variant={variant} disease={disease} label={label} />}
         {data && view === 'overview' && <Overview data={data} variant={variant} disease={disease} />}
         {data && view === 'visual' && <VisualOverview data={data} variant={variant} disease={disease} />}
         {data && view === 'visuallga' && <VisualOverview data={data} variant={variant} allLgas disease={disease} />}
@@ -185,6 +203,7 @@ export default function App() {
         {data && view === 'method' && <Methodology data={data} variant={variant} disease={disease} />}
         {data && view === 'datanotes' && <DataNotes disease={disease} label={label} caps={caps} datasetInfo={activeCfg?.dataset_info} />}
         {view === 'whatiflab' && <WhatIfLab disease={disease} />}
+        {view === 'benchmarking' && <Benchmarking disease={disease} label={label} />}
       </main>
     </div>
   )

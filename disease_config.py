@@ -385,6 +385,19 @@ def supports_month_slider(disease_id: str) -> bool:
                 and cfg.get("time_grain_fact") == "month" and not cfg.get("tb_style_excluded"))
 
 
+def supports_benchmarking(disease_id: str) -> bool:
+    """Comparative benchmarking (LGA vs peer LGAs vs state vs national
+    average) needs a real per-LGA monthly fact series to compare across --
+    same underlying requirement as the Forecast tab (forecastable, monthly
+    grain, not TB-style excluded). Malaria always qualifies (its own
+    LGA-month parquet)."""
+    if disease_id == "malaria":
+        return True
+    cfg = DISEASES[disease_id]
+    return bool(cfg.get("forecastable") and cfg.get("forecast_target")
+                and cfg.get("time_grain_fact") == "month" and not cfg.get("tb_style_excluded"))
+
+
 def supports_state_zone(disease_id: str) -> bool:
     """Whether a genuine, non-fabricated burden zone can be shown at STATE
     level. Malaria has its own incidence-banded zoneFor() (handled separately
@@ -404,6 +417,7 @@ def public_disease_list() -> list[dict]:
         caps = dict(cfg["capabilities"])
         caps["month_slider"] = supports_month_slider(did)
         caps["state_zone"] = supports_state_zone(did)
+        caps["benchmarking"] = supports_benchmarking(did)
         out.append({
             "id": did,
             "label": cfg["label"],
