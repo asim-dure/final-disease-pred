@@ -72,6 +72,48 @@ function FacilityTrajectory({ series, selYm }) {
   )
 }
 
+const pct = (x) => (typeof x === 'number' ? `${Math.round(x * 100)}%` : '—')
+
+// "Why this score" — the per-factor breakdown, mirroring the LGA burden explainer.
+function FactorBreakdown({ point, meta }) {
+  const f = point?.factors
+  if (!f) return null
+  const order = ['volume', 'positivity', 'treatment_gap', 'diagnostic_gap']
+  const inp = point.inputs || {}
+  const detail = {
+    volume: `${fmt(point.cases || 0)} confirmed cases${point.forecast ? ' (projected)' : ''}`,
+    positivity: inp.positivity != null ? `${pct(inp.positivity)} of RDTs positive${inp.rdt_tested ? ` · ${fmt(Math.round(inp.rdt_tested))} tests` : ''}` : 'no test data',
+    treatment_gap: inp.treatment_gap != null ? `${pct(inp.treatment_gap)} of cases without an ACT course` : 'no treatment data',
+    diagnostic_gap: inp.diagnostic_gap != null ? `${pct(inp.diagnostic_gap)} treated on presumption (unconfirmed)` : 'no diagnostic data',
+  }
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px dashed var(--border)', paddingTop: 12 }}>
+      <div style={{ fontSize: '.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.5px', color: '#64798a', marginBottom: 8 }}>
+        Why this score{point.inputs?.structural ? ' · uses this facility’s trailing profile on its projected volume' : ''}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {order.filter(k => f[k]).map(k => {
+          const m = meta[k] || {}; const fc = f[k]
+          return (
+            <div key={k}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.74rem', marginBottom: 3 }}>
+                <span style={{ color: '#33505f' }}><b>{m.label || k}</b> <span style={{ color: '#8296a3' }}>· {detail[k]}</span></span>
+                <span style={{ fontFamily: 'var(--mono)', color: '#33505f', whiteSpace: 'nowrap' }}>{fc.points?.toFixed(1)} / {fc.weight?.toFixed(0)} pts</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.min(100, (fc.sub || 0) * 100)}%`, background: COLORS.accent, borderRadius: 4 }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: '.68rem', color: '#8296a3', marginTop: 8, lineHeight: 1.5 }}>
+        Absolute clinical burden (0–100), comparable across every facility in Nigeria — weights renormalise over the indicators this facility reports.
+      </div>
+    </div>
+  )
+}
+
 export default function FacilityPanel({ disease, stateName, lga, selMonth, lgaBurden, lgaZone }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -99,26 +141,15 @@ export default function FacilityPanel({ disease, stateName, lga, selMonth, lgaBu
   useEffect(() => { setRisk(null); setRiskErr(null) }, [selYm, selFac])
 
   const pointAt = (fac) => (fac.series || []).find(s => s.ym === selYm) || null
-
-  // mean facility caseload for the selected month → anchors the burden scaling
-  const meanCases = useMemo(() => {
-    const fs = data?.facilities || []
-    if (!fs.length) return 0
-    const cs = fs.map(f => pointAt(f)?.cases ?? 0)
-    return cs.reduce((a, b) => a + b, 0) / cs.length
-  }, [data, selYm])
-
-  // burden_f = lgaBurden × (cases_f / mean_cases)  → averages up to lgaBurden
-  const burdenOf = (fac) => {
-    if (lgaBurden == null || !meanCases) return null
-    const c = pointAt(fac)?.cases ?? 0
-    return Math.min(100, Math.max(0, lgaBurden * (c / meanCases)))
-  }
+  // burden now comes straight from the backend (absolute, multi-factor); no
+  // client-side scaling. Missing (zero-case actual month) → null.
+  const burdenOf = (fac) => { const b = pointAt(fac)?.burden; return b == null ? null : b }
+  const factorMeta = data?.factor_meta || {}
 
   const facilities = useMemo(() => {
     if (!data?.facilities) return []
-    return [...data.facilities].sort((a, b) => ((burdenOf(b) ?? (pointAt(b)?.cases ?? -1)) - (burdenOf(a) ?? (pointAt(a)?.cases ?? -1))))
-  }, [data, selYm, lgaBurden, meanCases])
+    return [...data.facilities].sort((a, b) => ((burdenOf(b) ?? -1) - (burdenOf(a) ?? -1)))
+  }, [data, selYm])
 
   useEffect(() => {
     if (facilities.length && (!selFac || !facilities.find(f => f.facility === selFac))) setSelFac(facilities[0].facility)
@@ -126,8 +157,8 @@ export default function FacilityPanel({ disease, stateName, lga, selMonth, lgaBu
 
   const sel = facilities.find(f => f.facility === selFac) || null
   const selPoint = sel ? pointAt(sel) : null
-  const selBurden = sel ? burdenOf(sel) : null
-  const selZone = zoneOf(selBurden)
+  const selBurden = selPoint?.burden ?? null
+  const selZone = selPoint?.zone || zoneOf(selBurden)
   const selRank = sel ? facilities.findIndex(f => f.facility === sel.facility) + 1 : null
 
   const generateRisk = () => {
@@ -142,6 +173,7 @@ export default function FacilityPanel({ disease, stateName, lga, selMonth, lgaBu
         ym: selYm, label: selPoint.label, burden: selBurden, zone: selZone,
         cases: selPoint.cases, lga_rank: `${selRank} of ${facilities.length}`,
         recent: around, context_12m: sel.context_12m,
+        factors: selPoint.factors, inputs: selPoint.inputs,
       }),
     })
       .then(r => { if (!r.ok) return r.json().then(e => Promise.reject(e.detail || `HTTP ${r.status}`)); return r.json() })
@@ -154,8 +186,8 @@ export default function FacilityPanel({ disease, stateName, lga, selMonth, lgaBu
   return (
     <Card style={{ marginTop: 18 }}
       title={<span>🏥 Health facilities in {lga}
-        <InfoTip w={340} title="Consistent with the LGA above" text="Each facility's caseload is disaggregated from this LGA (they sum to the LGA total), and each facility's burden is the LGA's own burden score scaled by that facility's share of the caseload — so the facilities average up to the LGA's zone. A facility only exceeds the LGA's zone where its caseload runs above the LGA average." /></span>}
-      sub={data?.available === false ? 'Facility drill-down' : `Burden anchored to ${lga}'s LGA score for ${selMonth?.label || 'the selected month'} · click a facility`}
+        <InfoTip w={360} title="How facility burden is scored" text="An absolute 0–100 clinical burden, comparable across every facility in Nigeria. It blends case volume (log-scaled vs the national P99), test positivity, treatment gap (cases without an ACT course) and diagnostic gap (presumed share of reported cases). Weights renormalise over whatever a facility reports. Higher = prioritise first. Caseloads still sum to the LGA total; on forecast months the facility's trailing clinical profile is applied to its projected volume." /></span>}
+      sub={data?.available === false ? 'Facility drill-down' : `Ranked by clinical burden for ${selMonth?.label || 'the selected month'} · click a facility for the breakdown`}
       right={data?.n_facilities ? <span className="chip dot">{data.n_facilities} facilities</span> : null}>
 
       {loading && <div className="loading" style={{ height: 120 }}><div className="spinner" />Loading facilities…</div>}
@@ -173,13 +205,12 @@ export default function FacilityPanel({ disease, stateName, lga, selMonth, lgaBu
 
       {data && data.available && facilities.length > 0 && (
         <>
-          {/* consistency banner — shows the facilities really do roll up to the LGA */}
+          {/* LGA context — orientation only; facility scores are absolute, not derived from this */}
           {lgaBurden != null && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 13px', marginBottom: 14, borderRadius: 10,
-              background: (ZONE_C[lgaZoneName] || '#64748b') + '12', border: `1px solid ${(ZONE_C[lgaZoneName] || '#64748b')}44`, fontSize: '.82rem', color: '#25404f' }}>
-              <span style={{ fontSize: '1rem' }}>🔗</span>
-              <div>Each facility is scored relative to <b>{lga}</b>’s LGA burden of{' '}
-                <b style={{ color: ZONE_C[lgaZoneName] }}>{lgaBurden.toFixed(1)}</b> <ZoneChip zone={lgaZoneName} /> for {selMonth?.label}, by its share of the LGA caseload — most sit at or below it. The few that score higher are the facilities <b>driving this LGA’s caseload</b>, and are where to target resources first.</div>
+              background: 'var(--bg-3)', border: '1px solid var(--border)', fontSize: '.82rem', color: '#25404f' }}>
+              <span style={{ fontSize: '1rem' }}>🧭</span>
+              <div>For context, <b>{lga}</b> as a whole scores <b style={{ color: ZONE_C[lgaZoneName] }}>{lgaBurden.toFixed(1)}</b> <ZoneChip zone={lgaZoneName} /> on the LGA map. The facility scores below are <b>independent clinical burden scores</b> comparable to facilities anywhere in Nigeria — a low-burden LGA simply won’t contain high-burden facilities, so the top of this list tells you where to focus <i>within</i> {lga}.</div>
             </div>
           )}
 
@@ -188,10 +219,10 @@ export default function FacilityPanel({ disease, stateName, lga, selMonth, lgaBu
             <div className="col" style={{ flex: 1, minWidth: 260, maxWidth: 330 }}>
               <div style={{ maxHeight: 430, overflowY: 'auto', paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {facilities.map((f, i) => {
-                  const b = burdenOf(f); const z = zoneOf(b)
+                  const p = pointAt(f)
+                  const b = p?.burden ?? null; const z = p?.zone || zoneOf(b)
                   const on = f.facility === selFac
                   const c = ZONE_C[z] || '#64748b'
-                  const p = pointAt(f)
                   return (
                     <div key={f.facility} onClick={() => setSelFac(f.facility)} style={{ cursor: 'pointer',
                       border: on ? `2px solid ${c}` : '1px solid var(--border)', borderLeft: `4px solid ${c}`,
@@ -239,12 +270,19 @@ export default function FacilityPanel({ disease, stateName, lga, selMonth, lgaBu
                       <div style={{ fontFamily: 'var(--mono)', fontSize: '2rem', fontWeight: 600, color: '#0f2230' }}>{selPoint?.cases != null ? fmt(selPoint.cases) : '—'}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: '.66rem', textTransform: 'uppercase', letterSpacing: '.6px', color: '#64798a', fontWeight: 700 }}>Caseload rank</div>
+                      <div style={{ fontSize: '.66rem', textTransform: 'uppercase', letterSpacing: '.6px', color: '#64798a', fontWeight: 700 }}>Priority rank</div>
                       <div style={{ fontFamily: 'var(--mono)', fontSize: '2rem', fontWeight: 600, color: '#0f2230' }}>{selRank} <span style={{ fontSize: '.9rem', color: '#94a8b6' }}>/ {facilities.length}</span></div>
                     </div>
+                    {selPoint?.inputs?.positivity != null && (
+                      <div>
+                        <div style={{ fontSize: '.66rem', textTransform: 'uppercase', letterSpacing: '.6px', color: '#64798a', fontWeight: 700 }}>Test positivity</div>
+                        <div style={{ fontFamily: 'var(--mono)', fontSize: '2rem', fontWeight: 600, color: '#0f2230' }}>{pct(selPoint.inputs.positivity)}</div>
+                      </div>
+                    )}
                   </div>
 
                   <FacilityTrajectory series={sel.series} selYm={selYm} />
+                  <FactorBreakdown point={selPoint} meta={factorMeta} />
 
                   {isForecastMonth ? (
                     <div style={{ marginTop: 12 }}>
