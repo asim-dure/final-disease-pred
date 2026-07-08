@@ -18,7 +18,7 @@ export const InfoTip = ({ text, title, w = 260 }) => {
           border: '1px solid rgba(13,148,136,.3)', userSelect: 'none', marginLeft: 5 }}>i</span>
       {open && (
         <span style={{ position: 'absolute', zIndex: 50, top: '130%', left: '50%', transform: 'translateX(-50%)',
-          width: w, background: '#0f2230', color: '#e9f0f4', borderRadius: 9, padding: '10px 12px',
+          width: w, background: 'var(--bg-2)', color: 'var(--txt-0)', borderRadius: 9, padding: '10px 12px',
           fontSize: '.74rem', lineHeight: 1.55, fontWeight: 400, fontStyle: 'normal', textAlign: 'left',
           boxShadow: '0 10px 34px rgba(0,0,0,.28)', pointerEvents: 'none' }}>
           {title && <b style={{ display: 'block', color: '#5eead4', marginBottom: 3 }}>{title}</b>}
@@ -56,9 +56,9 @@ export const KPI = ({ label, value, delta, deltaClass, color = COLORS.accent }) 
 const TT = ({ active, payload, label, unit }) => {
   if (!active || !payload?.length) return null
   return (
-    <div style={{ background: '#ffffff', border: '1px solid #d7e1e8', borderRadius: 10,
+    <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10,
       padding: '10px 13px', fontSize: '.8rem', boxShadow: '0 8px 30px rgba(15,34,48,.12)' }}>
-      <div style={{ color: '#0f2230', fontWeight: 700, marginBottom: 6 }}>{monthLabel(label)}</div>
+      <div style={{ color: 'var(--txt-0)', fontWeight: 700, marginBottom: 6 }}>{monthLabel(label)}</div>
       {payload.map((p, i) => (
         <div key={i} style={{ color: p.color, display: 'flex', justifyContent: 'space-between', gap: 16 }}>
           <span>{p.name}</span>
@@ -125,7 +125,7 @@ export function CompareChart({ data, series, height = 320, unit, splitDate, spli
         <Tooltip content={<TT unit={unit} />} />
         {splitDate && <ReferenceLine x={splitDate} stroke="rgba(217,119,6,.55)" strokeDasharray="4 4"
           label={{ value: splitLabel, fill: COLORS.amber, fontSize: 11, position: 'insideTopRight' }} />}
-        <Legend wrapperStyle={{ fontSize: '.78rem', color: '#3c5366' }} />
+        <Legend wrapperStyle={{ fontSize: '.78rem', color: 'var(--txt-1)' }} />
         {series.map(s => (
           <Line key={s.key} type="monotone" dataKey={s.key} name={s.name} stroke={s.color}
             strokeWidth={2.2} strokeDasharray={s.dashed ? '6 4' : undefined} dot={false} connectNulls />
@@ -159,7 +159,7 @@ export function ModelOverlay({ actualSeries, mm, defaultSelected = ['Ensemble (t
     return rows
   }, [actualSeries, mm, sel])
 
-  const series = [{ key: 'Actual', name: 'Actual', color: '#0f2230', width: 2.6 },
+  const series = [{ key: 'Actual', name: 'Actual', color: 'var(--txt-0)', width: 2.6 },
     ...sel.map(m => ({ key: m, name: m, color: colorFor(m), dashed: true }))]
 
   if (!mm) return <div className="loading" style={{ height }}><div className="spinner" />Loading model forecasts…</div>
@@ -184,7 +184,7 @@ export function ModelOverlay({ actualSeries, mm, defaultSelected = ['Ensemble (t
           <Tooltip content={<TT />} />
           <ReferenceLine x={mm.dates[0]} stroke="rgba(217,119,6,.5)" strokeDasharray="4 4"
             label={{ value: 'Forecast →', fill: COLORS.amber, fontSize: 11, position: 'insideTopRight' }} />
-          <Legend wrapperStyle={{ fontSize: '.76rem', color: '#3c5366' }} />
+          <Legend wrapperStyle={{ fontSize: '.76rem', color: 'var(--txt-1)' }} />
           {series.map(s => (
             <Line key={s.key} type="monotone" dataKey={s.key} name={s.name} stroke={s.color}
               strokeWidth={s.width || 2} strokeDasharray={s.dashed ? '5 4' : undefined} dot={false} connectNulls />
@@ -206,8 +206,8 @@ export function AnnualBars({ data, height = 260 }) {
         <YAxis {...axisProps} tickFormatter={fmt} width={48} />
         <Tooltip cursor={{ fill: 'rgba(0,201,167,0.05)' }}
           content={({ active, payload, label }) => active && payload?.length ? (
-            <div style={{ background: '#ffffff', border: '1px solid #d7e1e8', borderRadius: 10, padding: '9px 12px', fontSize: '.8rem', boxShadow: '0 8px 30px rgba(15,34,48,.12)' }}>
-              <div style={{ color: '#0f2230', fontWeight: 700 }}>{label}{payload[0].payload.forecast ? ' (forecast)' : ''}</div>
+            <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 12px', fontSize: '.8rem', boxShadow: '0 8px 30px rgba(15,34,48,.12)' }}>
+              <div style={{ color: 'var(--txt-0)', fontWeight: 700 }}>{label}{payload[0].payload.forecast ? ' (forecast)' : ''}</div>
               <div className="mono" style={{ color: payload[0].payload.forecast ? COLORS.amber : COLORS.accent }}>{fmtFull(payload[0].value)} cases</div>
             </div>) : null} />
         <Bar dataKey="cases" radius={[6, 6, 0, 0]}>
@@ -327,12 +327,12 @@ export function HBars({ data, max, valueKey = 'value', labelKey = 'label', color
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       {data.map((d, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 130, fontSize: '.82rem', color: '#3c5366', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d[labelKey]}</div>
-          <div style={{ flex: 1, background: '#eef3f7', borderRadius: 6, height: 22, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ width: 130, fontSize: '.82rem', color: 'var(--txt-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d[labelKey]}</div>
+          <div style={{ flex: 1, background: 'var(--bg-3)', borderRadius: 6, height: 22, position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.max(2, (d[valueKey] / max) * 100)}%`,
               background: typeof color === 'function' ? color(d) : color, borderRadius: 6, transition: 'width .4s' }} />
           </div>
-          <div className="mono" style={{ width: 70, textAlign: 'right', fontSize: '.82rem', color: '#0f2230' }}>{fmtVal(d[valueKey])}</div>
+          <div className="mono" style={{ width: 70, textAlign: 'right', fontSize: '.82rem', color: 'var(--txt-0)' }}>{fmtVal(d[valueKey])}</div>
         </div>
       ))}
     </div>

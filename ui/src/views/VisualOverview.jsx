@@ -3,13 +3,50 @@ import DeckGL from '@deck.gl/react'
 import { GeoJsonLayer } from '@deck.gl/layers'
 import { Map } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { Card, InfoTip } from '../components'
-import { fmt, COLORS } from '../lib'
+import { Card, InfoTip, CompareChart, MarkdownLite } from '../components'
+import { fmt, COLORS, API_BASE } from '../lib'
 import FacilityPanel from './FacilityPanel'
+import { ZONE_ORDER, scoreToZone, scoreDetail, buildZones, cl, n0 } from '../burdenScore'
+import { lgaKeyFor } from '../lgaAlias'
+import { BLANK_MAP_STYLE } from '../mapStyle'
 
 const BASE = import.meta.env.BASE_URL || '/'
-const CARTO = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 const NIGERIA = { longitude: 8.7, latitude: 9.3, zoom: 5.2, pitch: 0, bearing: 0 }
+
+// Deep Dive (technical/model-internals pages -- National Overview, Model Lab,
+// Data Explorer, Model & Methodology) used to live as its own dropdown in the
+// app's TOP nav bar. Per request it now lives ONLY here, as a self-contained
+// heading in Visual Overview's own top-right -- a separate, clearly-labelled
+// control, not merged into the map/levers/graph content around it.
+function DeepDiveMenu({ items, activeView, onNavigate }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = e => { if (!e.target.closest('.vo-deepdive-anchor')) setOpen(false) }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+  if (!items?.length) return null
+  return (
+    <div className="topnav-deepdive vo-deepdive-anchor" style={{ flexShrink: 0 }}>
+      <button className="nav-deepdive-toggle" onClick={() => setOpen(o => !o)}
+        style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-1)' }}>
+        <span className="ico">🧬</span>Deep Dive
+        <span className="chev">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="nav-deepdive-items">
+          {items.map(n => (
+            <button key={n.id} className={activeView === n.id ? 'active' : ''}
+              onClick={() => { onNavigate(n.id); setOpen(false) }}>
+              <span className="ico">{n.ico}</span>{n.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const ZONES = {
   'Not a Hotspot': { c: '#64748b', t: '#64748b', fill: [148, 163, 184], a: 90 },
@@ -18,21 +55,18 @@ const ZONES = {
   'Amber':         { c: '#ea580c', t: '#c2410c', fill: [234, 88, 12],  a: 210 },
   'Red':           { c: '#dc2626', t: '#dc2626', fill: [220, 38, 38],  a: 215 },
 }
-const ZONE_ORDER = ['Red', 'Amber', 'Yellow', 'Green', 'Not a Hotspot']
+// Raised bar for what counts as a hotspot: most LGAs should read "Not a
+// Hotspot" rather than every area getting a colour. Only genuinely elevated
+// burden (60+) earns a hotspot tier -- see facility_api.py's _ZONE_THRESHOLDS
+// for the full rationale (kept identical here for one consistent scale).
+// ZONE_ORDER/scoreToZone now live in ../burdenScore (shared with the
+// MalariaIQ Dashboard) so the two views can never disagree on a zone again.
 const ZONE_INFO = {
-  'Red': 'Severe hotspot (burden ≥ 78). Highest priority for interventions.',
-  'Amber': 'High burden (58–78). Needs attention.',
-  'Yellow': 'Moderate burden (38–58). Watch closely.',
-  'Green': 'Low burden (18–38). Under control.',
-  'Not a Hotspot': 'Minimal burden (< 18). Not currently a concern.',
-}
-function scoreToZone(d) {
-  const s = d / 100
-  if (s < 0.18) return 'Not a Hotspot'
-  if (s < 0.38) return 'Green'
-  if (s < 0.58) return 'Yellow'
-  if (s < 0.78) return 'Amber'
-  return 'Red'
+  'Red': 'Severe hotspot (burden ≥ 91). Highest priority for interventions.',
+  'Amber': 'High burden (81–90). Needs attention.',
+  'Yellow': 'Moderate burden (71–80). Watch closely.',
+  'Green': 'Low burden (60–70). Under control.',
+  'Not a Hotspot': 'Minimal burden (< 60). Not currently a concern.',
 }
 
 const LEVERS = [
@@ -40,77 +74,253 @@ const LEVERS = [
   { id: 'temp', field: 'temp', label: '🌡️ Temperature',          cat: '🌍 Environmental Risk',     unit: '°C',     agg: 'mean', info: 'Average temperature. Malaria risk peaks around 27 °C; much hotter or colder slows the parasite and lowers the score.' },
   { id: 'hum',  field: 'hum',  label: '💧 Humidity',              cat: '🌍 Environmental Risk',     unit: '%',      agg: 'mean', info: 'Humidity. Higher humidity lets mosquitoes live longer, raising the score.' },
   { id: 'act',  field: 'act',  label: '💊 ACT treatment courses', cat: '💉 Treatment & Diagnostics', unit: 'doses/mo', agg: 'sum', info: 'Malaria treatment courses given. More treatment shrinks the “treatment gap”, lowering the burden score.' },
+  { id: 'rdt',  field: 'rdt_done', label: '🧪 RDT tests performed', cat: '💉 Treatment & Diagnostics', unit: 'tests/mo', agg: 'sum', info: 'Rapid diagnostic tests done. Affects the case-trend graph below via its empirical elasticity (more testing catches more real cases sooner); the map\'s own burden score is driven by Fever Testing Rate (testing gap) instead.' },
+  { id: 'iptp', field: 'ipt_cov', label: '🤰 IPTp coverage (pregnant women)', cat: '💉 Treatment & Diagnostics', unit: '%', agg: 'mean', info: 'IPTp coverage among pregnant women. Higher coverage shrinks the "IPT gap", lowering the burden score.' },
   { id: 'llin', field: 'llin', label: '🛏️ LLIN nets distributed', cat: '🛡️ Vector Control',        unit: 'nets/mo',  agg: 'sum', info: 'Insecticide-treated nets distributed. More nets shrink the “protection gap”, lowering the burden score.' },
 ]
 
-const cl = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v))
-const n0 = v => (v == null ? '0' : (Math.abs(v) >= 1000 ? fmt(v) : (Math.abs(v) >= 10 ? Math.round(v).toLocaleString() : v.toFixed(1))))
-
-function scoreDetail(x, peerAvg, flags = {}) {
-  const cases = x.cases || 0
-  const total = (x.total || 0) || cases
-  const vol = peerAvg > 0 ? cl(cases / (peerAvg * 3)) : (cases > 0 ? 1 : 0)
-  const trend = cl(((x.trend || 0) + 1) / 2)
-  const rd = x.rdt_done || 0
-  // RDT-positive counts aren't collected in this dataset (always 0) — treat that
-  // as missing data and fall back to the same neutral assumption used when no
-  // RDT testing happened at all, instead of silently scoring "0% positivity"
-  // everywhere and uniformly deflating every area's burden score.
-  const haveRdtPos = !flags.no_rdt_pos
-  const pos = (haveRdtPos && rd > 0) ? cl((x.rdt_pos || 0) / rd) : (total > 0 ? 0.55 : 0)
-  const gap = total > 0 ? cl((total - (x.act || 0) - (x.treated || 0)) / total) : 0
-  const rain_s = cl(((x.rain || 0) - 3) / 27)
-  const temp_s = 1 - cl(Math.abs((x.temp ?? 27) - 27) / 12)
-  const hum_s = cl(((x.hum ?? 60) - 40) / 55)
-  const nets = (x.itn || 0) + (x.llin || 0)
-  const ref = Math.max(1, cases * 2.5)
-  const net_s = 1 - cl(nets / ref)
-  const ipt_s = 1 - cl((x.ipt_cov || 0) / 100)
-  const F = [
-    { name: 'A1 · Case volume',   w: 20, sub: vol,    formula: 'min(1, cases ÷ (peer_avg × 3))',  subst: `min(1, ${n0(cases)} ÷ (${n0(peerAvg)} × 3))` },
-    { name: 'A2 · Case trend',    w: 15, sub: trend,  formula: '(trend_ratio + 1) ÷ 2',            subst: `(${(x.trend || 0).toFixed(2)} + 1) ÷ 2` },
-    { name: 'B1 · RDT positivity',w: 12, sub: pos,    formula: 'positives ÷ tests (else 0.55)',     subst: (haveRdtPos && rd > 0) ? `${n0(x.rdt_pos || 0)} ÷ ${n0(rd)}` : 'no RDT+ data → 0.55' },
-    { name: 'B2 · Treatment gap', w: 13, sub: gap,    formula: '(total − ACT − treated) ÷ total',   subst: total > 0 ? `(${n0(total)} − ${n0(x.act || 0)} − ${n0(x.treated || 0)}) ÷ ${n0(total)}` : 'no cases → 0' },
-    { name: 'C1 · Rainfall',      w: 8,  sub: rain_s, formula: '(mm/day − 3) ÷ 27',                 subst: `(${(x.rain || 0).toFixed(1)} − 3) ÷ 27` },
-    { name: 'C2 · Temperature',   w: 6,  sub: temp_s, formula: '1 − |°C − 27| ÷ 12',                subst: `1 − |${(x.temp ?? 27).toFixed(1)} − 27| ÷ 12` },
-    { name: 'C3 · Humidity',      w: 6,  sub: hum_s,  formula: '(% − 40) ÷ 55',                     subst: `(${(x.hum ?? 60).toFixed(0)} − 40) ÷ 55` },
-    { name: 'D1 · Net gap',       w: 10, sub: net_s,  formula: '1 − (ITN + LLIN) ÷ (cases × 2.5)',  subst: `1 − ${n0(nets)} ÷ ${n0(ref)}` },
-    { name: 'D2 · IRS gap',       w: 5,  sub: 1.0,    formula: '1 − sprayed ÷ (total × 0.5)',       subst: 'no IRS data → 1.0' },
-    { name: 'D3 · IPT gap',       w: 5,  sub: ipt_s,  formula: '1 − IPT_coverage ÷ 100',            subst: `1 − ${n0(x.ipt_cov || 0)} ÷ 100` },
-  ]
-  F.forEach(r => { r.points = r.w * r.sub })
-  return { factors: F, raw: F.reduce((a, r) => a + r.points, 0) }
+// Which of the levers above map onto a real, unit-costed warehouse column
+// /ews/api/budget can price (only ACT/LLIN/RDT/IPTp have a ₦ unit-cost table --
+// rain/temp/hum aren't actionable spend, and the Mechanistic/population
+// sliders belong to a different model entirely with no cost table of its
+// own). "Plan Budget" only ever prices THESE four, using whatever % the user
+// already set on the lever panel -- no separate intervention picker.
+const BUDGET_LEVER_COLS = {
+  act: 'ACT Given - Total',
+  llin: 'LLIN given – Total',
+  rdt: 'MAL - Malaria cases tested with RDT',
+  iptp: 'IPTp1 Coverage (institutional)',
 }
 
-function pctRanks(vals) {
-  const n = vals.length
-  if (n === 0) return []
-  const idx = vals.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0])
-  const out = new Array(n)
-  let i = 0
-  while (i < n) {
-    let j = i
-    while (j + 1 < n && idx[j + 1][0] === idx[i][0]) j++
-    const avg = (i + j + 2) / 2
-    for (let k = i; k <= j; k++) out[idx[k][1]] = avg / n
-    i = j + 1
+// Small, always-derived-from-the-scenario-already-built-above budget section,
+// living directly under the case-trend graph. Deliberately has NO level/
+// state/target/horizon/covariate controls of its own -- it reuses exactly the
+// scope (national/state) and lever percentages already set in the panel on
+// the left, and stays disabled until at least one BUDGET-RELEVANT lever
+// (ACT/LLIN/RDT/IPTp) has actually been moved, so it can never generate a
+// "budget" for a scenario that's identical to doing nothing.
+function fmtNgn(n) {
+  if (n == null || isNaN(n)) return '—'
+  if (Math.abs(n) >= 1e9) return '₦' + (n / 1e9).toFixed(2) + 'B'
+  if (Math.abs(n) >= 1e6) return '₦' + (n / 1e6).toFixed(1) + 'M'
+  if (Math.abs(n) >= 1e3) return '₦' + (n / 1e3).toFixed(0) + 'K'
+  return '₦' + Math.round(n).toLocaleString()
+}
+const BUDGET_QUICK_PICKS = [10e6, 50e6, 100e6, 500e6]
+
+// "At a glance" summary tiles -- 3-4 plain numbers, no markdown reading
+// required, shown ABOVE the full AI-written plan (which stays available but
+// collapsed) so the headline answer ("what does this cost / what's the best
+// mix") is legible in one glance instead of buried in a long report.
+function PlanGlance({ items }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 10, marginTop: 12 }}>
+      {items.map(it => (
+        <div key={it.label} style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ fontSize: '.68rem', color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{it.label}</div>
+          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: it.color || 'var(--txt-0)', marginTop: 2 }}>{it.value}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Two modes, one shared "Plan Budget" section under the trend chart:
+//  - "Cost My Scenario": prices out the EXACT levers already set on this page
+//    (unchanged forward-mode behaviour, only its result display simplified).
+//  - "Optimize for a Budget": the reverse direction the manager asked for --
+//    given a ₦ amount, /ews/api/budget-optimize's water-filling solver (see
+//    api.py) computes the mathematically-optimal spend mix to MINIMISE cases
+//    under that budget (not an LLM guess -- validated against exhaustive
+//    brute-force search in test_budget_solver.py), and the AI's only job is
+//    to narrate that already-decided allocation.
+// Mechanistic sliders don't default to 0 (unlike the empirical LEVERS, which
+// are all "0% = untouched") -- ITN/ACT-effectiveness/IRS/vaccine each start
+// at a fixed neutral position, so detecting "the user actually moved this"
+// means comparing against THESE defaults, not against zero.
+const MECH_DEFAULTS = { itn: 40, actMech: 45, irs: 50, vaccine: 50 }
+
+function PlanBudget({ scope, selState, vals, trendFc, population, disease, otherLevers = {} }) {
+  const [mode, setMode] = useState('scenario')
+  const [plan, setPlan] = useState(null)
+  const [glance, setGlance] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState(null)
+  const [budgetNgn, setBudgetNgn] = useState(50e6)
+
+  const { popPct = 0, densPct = 0, itn = MECH_DEFAULTS.itn, irs = MECH_DEFAULTS.irs,
+    actMech = MECH_DEFAULTS.actMech, iptpMech, iptpMechSeed, vaccine = MECH_DEFAULTS.vaccine } = otherLevers
+
+  // What actually has a real ₦ unit cost (ACT/LLIN/RDT/IPTp) -- costed EXACTLY
+  // as the user set them, whenever they touched one directly.
+  const costedInterventions = {}
+  for (const [leverId, col] of Object.entries(BUDGET_LEVER_COLS)) {
+    if (vals[leverId]) costedInterventions[col] = vals[leverId]
   }
-  return out
+
+  // Plan Budget now reacts to ANY lever on this page moving away from its
+  // baseline -- empirical (rain/temp/hum/act/treat/rdt/iptp/llin), demographic
+  // (population/density), or mechanistic (ITN use, ACT effectiveness, IRS,
+  // real-vs-adjusted IPTp, vaccine) -- not just the 4 that happen to have a
+  // real unit-cost column. A rainfall or population change still moves the
+  // case forecast and still deserves a real, costed response below.
+  const empiricalMoved = Object.values(vals || {}).some(v => v)
+  const demographicMoved = popPct !== 0 || densPct !== 0
+  const mechanisticMoved = itn !== MECH_DEFAULTS.itn || irs !== MECH_DEFAULTS.irs ||
+    actMech !== MECH_DEFAULTS.actMech || vaccine !== MECH_DEFAULTS.vaccine ||
+    (iptpMechSeed != null && iptpMech !== iptpMechSeed)
+  const hasActionableChange = empiricalMoved || demographicMoved || mechanisticMoved
+
+  const baseMean = trendFc.length ? trendFc.reduce((a, r) => a + (r.Baseline || 0), 0) / trendFc.length : 0
+  const wiMean = trendFc.length ? trendFc.reduce((a, r) => a + (r.Scenario || 0), 0) / trendFc.length : 0
+  const caseDeltaPct = baseMean > 0 ? (wiMean - baseMean) / baseMean * 100 : 0
+  const level = scope === 'lgas' && selState ? 'state' : 'national'
+
+  // Nothing directly costable was touched (only rainfall/population/vaccine/
+  // mechanistic-only sliders) but the scenario still moves the case forecast
+  // -- auto-size a real ACT+LLIN response proportional to that shift (capped
+  // at 100%), so there's always something concrete priced instead of quietly
+  // doing nothing just because the trigger wasn't one of the 4 costed levers.
+  const autoSized = Object.keys(costedInterventions).length === 0 && Math.abs(caseDeltaPct) > 0.5
+  const autoPct = Math.round(Math.min(100, Math.abs(caseDeltaPct) * 1.2))
+  const effectiveInterventions = autoSized
+    ? { [BUDGET_LEVER_COLS.act]: autoPct, [BUDGET_LEVER_COLS.llin]: autoPct }
+    : costedInterventions
+
+  const switchMode = m => { setMode(m); setPlan(null); setGlance(null); setErr(null) }
+
+  const generateScenario = async () => {
+    setLoading(true); setErr(null); setPlan(null); setGlance(null)
+    try {
+      const r = await fetch(`${API_BASE}/budget`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          level, state_name: level === 'state' ? selState : null,
+          target: 'MAL - Malaria cases confirmed (number)', interventions: effectiveInterventions,
+          base_monthly_cases: baseMean, whatif_monthly_cases: wiMean,
+          population, horizon: trendFc.length,
+          months: trendFc.map(d => d.date), base_monthly: trendFc.map(d => d.Baseline),
+          whatif_monthly: trendFc.map(d => d.Scenario), disease,
+        }),
+      })
+      const d = await r.json().catch(() => null)
+      if (!r.ok) throw new Error((d && d.detail) || `HTTP ${r.status}`)
+      setPlan(d.plan)
+      const casesAverted = Math.max(0, baseMean - wiMean)
+      setGlance([
+        { label: 'Cases averted/mo', value: n0(casesAverted), color: COLORS.green },
+        { label: 'Reduction', value: baseMean > 0 ? Math.round(casesAverted / baseMean * 100) + '%' : '—', color: COLORS.green },
+        { label: 'Levers costed', value: Object.keys(effectiveInterventions).length },
+      ])
+    } catch (e) { setErr(String(e.message || e)) }
+    setLoading(false)
+  }
+
+  const generateOptimized = async () => {
+    setLoading(true); setErr(null); setPlan(null); setGlance(null)
+    try {
+      const r = await fetch(`${API_BASE}/budget-optimize`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          level, state_name: level === 'state' ? selState : null,
+          target: 'MAL - Malaria cases confirmed (number)',
+          horizon: trendFc.length || 12, budget_ngn: budgetNgn, disease,
+        }),
+      })
+      const d = await r.json().catch(() => null)
+      if (!r.ok) throw new Error((d && d.detail) || `HTTP ${r.status}`)
+      setPlan(d.plan)
+      setGlance([
+        { label: 'Cases averted/mo', value: n0(d.solver?.cases_averted_per_month || 0), color: COLORS.green },
+        { label: 'Reduction', value: (d.solver?.pct_reduction ?? 0) + '%', color: COLORS.green },
+        { label: 'Budget used', value: fmtNgn(d.solver?.total_spend_ngn), color: COLORS.accent },
+      ])
+    } catch (e) { setErr(String(e.message || e)) }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px dashed var(--border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontWeight: 700, fontSize: '.86rem', color: 'var(--txt-0)' }}>💰 Plan Budget</span>
+        <div style={{ display: 'flex', gap: 0, background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 9, padding: 2 }}>
+          {[['scenario', '📊 Cost My Scenario'], ['optimize', '🎯 Optimize a Budget']].map(([m, lbl]) => (
+            <button key={m} onClick={() => switchMode(m)}
+              style={{ border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: 7, fontFamily: 'var(--font)',
+                fontSize: '.76rem', fontWeight: 700, background: mode === m ? 'var(--bg-1)' : 'transparent',
+                color: mode === m ? COLORS.violet : 'var(--txt-2)' }}>{lbl}</button>
+          ))}
+        </div>
+      </div>
+
+      {mode === 'scenario' ? (
+        !hasActionableChange ? (
+          <div style={{ fontSize: '.8rem', color: 'var(--txt-3)', lineHeight: 1.6 }}>
+            Move <b>any lever</b> above (empirical, demographic, or mechanistic) to price out this scenario — this uses the exact scenario you've built on this page, so there's nothing to cost until something changes.
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: '.74rem', color: 'var(--txt-2)', marginBottom: 8 }}>
+              {autoSized ? (
+                <>You changed non-costable factors (rainfall/population/vaccine/mechanistic sliders) with no direct spend selected — auto-sizing a real <b>ACT +{autoPct}%, LLIN +{autoPct}%</b> response to offset the resulting {caseDeltaPct >= 0 ? '+' : ''}{caseDeltaPct.toFixed(1)}% case shift. Move ACT/LLIN/RDT/IPTp yourself for exact control.</>
+              ) : (
+                <>Costing what you've set: {Object.entries(costedInterventions).map(([c, p]) => `${c.split(' ')[0]} ${p > 0 ? '+' : ''}${p}%`).join(', ')}</>
+              )}
+            </div>
+            <button onClick={generateScenario} disabled={loading}
+              style={{ padding: '8px 18px', background: COLORS.violet, color: '#fff', border: 'none', borderRadius: 9,
+                cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '.82rem', fontFamily: 'var(--font)', opacity: loading ? .6 : 1 }}>
+              {loading ? '⏳ Generating…' : '💰 Generate Budget Plan'}
+            </button>
+          </>
+        )
+      ) : (
+        <div>
+          <div style={{ fontSize: '.8rem', color: 'var(--txt-2)', marginBottom: 10, lineHeight: 1.6 }}>
+            Tell us your budget — a mathematical optimiser (not an AI guess) works out the spend mix across ACT, LLIN, RDT and IPTp that <b>minimises cases</b> for that amount, then AI writes up the deployment plan.
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+            <input type="number" value={budgetNgn} min={0} step={1e6} onChange={e => setBudgetNgn(+e.target.value || 0)}
+              style={{ width: 160, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)', fontFamily: 'var(--font)', fontSize: '.85rem' }} />
+            <span style={{ fontSize: '.78rem', color: 'var(--txt-3)' }}>₦ ({fmtNgn(budgetNgn)})</span>
+            {BUDGET_QUICK_PICKS.map(v => (
+              <button key={v} onClick={() => setBudgetNgn(v)}
+                style={{ padding: '5px 11px', borderRadius: 20, border: `1px solid ${budgetNgn === v ? COLORS.violet : 'var(--border)'}`,
+                  background: budgetNgn === v ? `${COLORS.violet}18` : 'transparent', color: budgetNgn === v ? COLORS.violet : 'var(--txt-2)',
+                  fontSize: '.74rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>{fmtNgn(v)}</button>
+            ))}
+          </div>
+          <button onClick={generateOptimized} disabled={loading || budgetNgn <= 0}
+            style={{ padding: '8px 18px', background: COLORS.violet, color: '#fff', border: 'none', borderRadius: 9,
+              cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '.82rem', fontFamily: 'var(--font)', opacity: (loading || budgetNgn <= 0) ? .6 : 1 }}>
+            {loading ? '⏳ Optimising…' : '🎯 Find Best Plan'}
+          </button>
+        </div>
+      )}
+
+      {err && (
+        <div style={{ color: COLORS.coral, fontSize: '.8rem', marginTop: 10, background: 'rgba(251,113,133,.1)', border: '1px solid rgba(251,113,133,.35)', borderRadius: 8, padding: '10px 14px' }}>
+          <b>Error:</b> {err}
+        </div>
+      )}
+      {glance && !loading && <PlanGlance items={glance} />}
+      {plan && !loading && (
+        <details style={{ marginTop: 12 }} open>
+          <summary style={{ cursor: 'pointer', fontSize: '.8rem', fontWeight: 700, color: 'var(--txt-1)', marginBottom: 8 }}>
+            📋 Full AI-written plan (month-by-month deployment, costs, risks)
+          </summary>
+          <div style={{ marginTop: 8, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', maxHeight: 420, overflowY: 'auto' }}>
+            <MarkdownLite text={plan} />
+          </div>
+        </details>
+      )}
+    </div>
+  )
 }
 
-function buildZones(units, peerAvg, flags) {
-  const raws = units.map(u => scoreDetail(u.x, peerAvg, flags).raw)
-  const ranks = pctRanks(raws)
-  const order = raws.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0])
-  const pos = {}; order.forEach(([, i], r) => { pos[i] = r + 1 })
-  const res = {}
-  units.forEach((u, i) => {
-    const rankTerm = 0.60 * ranks[i], rawTerm = 0.40 * (raws[i] / 100)
-    const display = cl(rankTerm + rawTerm, 0, 1) * 100
-    res[u.key] = { raw: raws[i], rankPct: ranks[i], rankPos: pos[i], rankTerm, rawTerm, display, zone: scoreToZone(display), n: units.length }
-  })
-  return res
-}
+// scoreDetail/pctRanks/buildZones/cl/n0 now live in ../burdenScore (imported
+// above) -- shared with the MalariaIQ Dashboard so the two views can never
+// disagree on a burden score, zone colour, or hotspot count again.
 
 function applyLevers(x, vals) {
   const y = { ...x }
@@ -120,9 +330,42 @@ function applyLevers(x, vals) {
     let v = (x[L.field] || 0) * (1 + pct / 100)
     if (L.field === 'temp') v = cl(v, 15, 45)
     if (L.field === 'hum') v = cl(v, 0, 100)
+    if (L.field === 'ipt_cov') v = cl(v, 0, 100)
     y[L.field] = Math.max(0, v)
   }
   return y
+}
+
+// Case-count multiplier from the SAME lever %-changes that already recolour the
+// map, so the map and the case-trend chart respond to one shared control
+// surface instead of being two disconnected what-if systems. Reuses the exact
+// elasticity-multiplier shape from the What-If Simulator (drivers.py's
+// DRIVER_META, via data.drivers.meta) -- rain/temp/hum/act/llin are the same 5
+// driver ids in both places, so this is the identical model, not a new one.
+function caseMultiplier(vals, baseline, driversMeta) {
+  if (!driversMeta) return 1
+  let m = 1
+  for (const L of LEVERS) {
+    const pct = vals[L.id] || 0
+    if (!pct) continue
+    const meta = driversMeta[L.id]
+    if (!meta) continue
+    const base = baseline[L.field] || 0
+    let v = base * (1 + pct / 100)
+    if (L.field === 'temp') v = cl(v, 15, 45)
+    if (L.field === 'hum') v = cl(v, 0, 100)
+    if (meta.good === 'opt') {
+      const opt = meta.optimum ?? 27
+      const suit = x => 1 - Math.min(1, Math.abs(x - opt) / 12)
+      const sb = Math.max(0.05, suit(base))
+      m *= Math.max(0.2, Math.min(2, suit(v) / sb))
+    } else if (base > 0) {
+      const frac = (v - base) / base
+      const aud = meta.audience ?? 1   // e.g. IPTp only affects the ~8% of cases in pregnant women
+      m *= Math.max(0.2, Math.min(3, 1 + meta.elasticity * frac * aud))
+    }
+  }
+  return Math.max(0.1, Math.min(4, m))
 }
 
 function bbox(geom) {
@@ -142,7 +385,7 @@ const ZoneChip = ({ zone }) => (
 // monthly series). Source "zone" labels vary by disease ("Safe Zone", "Red Zone", canonical
 // "Amber", etc.) so the map/legend colour always derives from the canonical burden_score via
 // scoreToZone() instead, keeping every disease's colouring consistent.
-function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
+function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiveItems, activeView, onNavigate }) {
   const [statesGeo, setStatesGeo] = useState(null)
   const [lgasGeo, setLgasGeo] = useState(null)
   const [burden, setBurden] = useState(null)
@@ -223,9 +466,9 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
     const dat = selState ? { ...lgasGeo, features: lgasGeo.features.filter(f => f.properties.st === selState) } : lgasGeo
     const fillFor = key => { const z = ZONES[zoneFor(key)]; return [...z.fill, z.a] }
     return [new GeoJsonLayer({ id: 'lgas-static', data: dat, pickable: true, stroked: true, filled: true,
-      getFillColor: f => fillFor(`${f.properties.st}|||${f.properties.lga}`), getLineColor: [255, 255, 255], lineWidthMinPixels: 0.4,
+      getFillColor: f => fillFor(lgaKeyFor(f.properties.st, f.properties.lga)), getLineColor: [255, 255, 255], lineWidthMinPixels: 0.4,
       updateTriggers: { getFillColor: monthIdx },
-      onClick: info => info.object && setSelKey(`${info.object.properties.st}|||${info.object.properties.lga}`),
+      onClick: info => info.object && setSelKey(lgaKeyFor(info.object.properties.st, info.object.properties.lga)),
       onHover: info => setHover(info.object ? { ...info, kind: 'lga' } : null) })]
   }, [scope, statesGeo, lgasGeo, selState, lgaMap, stateMap, monthIdx])
 
@@ -267,11 +510,14 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
 
   return (
     <>
-      <div className="view-head">
-        <h2>{label} — Hotspot Map
-          <InfoTip w={320} title="What this map shows" text={`Every Nigerian ${scope === 'states' ? 'state' : 'LGA'} coloured by ${label.toLowerCase()} burden, from the latest available reported snapshot in the warehouse. This is a precomputed score (no live levers — no driver/intervention data exists yet for this disease).`} />
-        </h2>
-        <p>Zones come from a precomputed burden score (case volume + trend). Ranked by <b>{rankByLabel || (hasScore ? 'Hotspot Score' : 'Case Volume Rank')}</b>{!hasScore && ' — this disease has no modelled risk score, so areas are ranked by reported case volume instead.'}</p>
+      <div className="view-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
+        <div>
+          <h2>{label} — Hotspot Map
+            <InfoTip w={320} title="What this map shows" text={`Every Nigerian ${scope === 'states' ? 'state' : 'LGA'} coloured by ${label.toLowerCase()} burden, from the latest available reported snapshot in the warehouse. This is a precomputed score (no live levers — no driver/intervention data exists yet for this disease).`} />
+          </h2>
+          <p>Zones come from a precomputed burden score (case volume + trend). Ranked by <b>{rankByLabel || (hasScore ? 'Hotspot Score' : 'Case Volume Rank')}</b>{!hasScore && ' — this disease has no modelled risk score, so areas are ranked by reported case volume instead.'}</p>
+        </div>
+        <DeepDiveMenu items={deepDiveItems} activeView={activeView} onNavigate={onNavigate} />
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
@@ -293,12 +539,12 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
         <Card style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 200 }}>
-              <div style={{ fontSize: '.72rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#64798a', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+              <div style={{ fontSize: '.72rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--txt-2)', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
                 Time period
                 <InfoTip w={300} title="Actual + forecast months" text="Steps through actually-reported months in the warehouse, plus a SARIMAX-forecast tail computed per LGA from that LGA's own monthly history. LGAs with too little real history (under 12 reported months) are left out of the forecast tail rather than extrapolated from too little signal." />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: '1.3rem', fontWeight: 600, color: '#0f2230' }}>{curMonth?.label || '—'}</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: '1.3rem', fontWeight: 600, color: 'var(--txt-0)' }}>{curMonth?.label || '—'}</span>
                 <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: '.66rem', fontWeight: 700,
                   background: curMonth?.forecast ? 'rgba(217,119,6,.14)' : 'rgba(13,148,136,.14)',
                   color: curMonth?.forecast ? '#b45309' : COLORS.accent,
@@ -325,7 +571,7 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
             <div style={{ fontSize: '.64rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: ZONES[z].t, display: 'flex', alignItems: 'center' }}>
               {z}<InfoTip text={ZONE_INFO[z]} />
             </div>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: '1.5rem', color: '#0f2230', marginTop: 4 }}>{dist[z] || 0}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: '1.5rem', color: 'var(--txt-0)', marginTop: 4 }}>{dist[z] || 0}</div>
           </div>
         ))}
       </div>
@@ -337,7 +583,7 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
           {!ready && <div className="loading" style={{ height: '100%' }}><div className="spinner" />Loading map…</div>}
           {ready && (
             <DeckGL viewState={view} controller={true} layers={layers} onViewStateChange={e => setView(e.viewState)} style={{ position: 'absolute', inset: 0 }}>
-              <Map mapStyle={CARTO} />
+              <Map mapStyle={BLANK_MAP_STYLE} />
             </DeckGL>
           )}
           {hover?.object && (() => {
@@ -347,32 +593,32 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
               const z = zoneFor(key)
               const score = scoreFor(key)
               return (
-                <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: '#fff', border: '1px solid #d7e1e8',
+                <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: 'var(--bg-2)', border: '1px solid var(--border)',
                   borderRadius: 8, padding: '9px 12px', fontSize: '.76rem', boxShadow: '0 8px 24px rgba(15,34,48,.16)', zIndex: 5, minWidth: 160 }}>
-                  <div style={{ fontWeight: 700, color: '#0f2230', marginBottom: 4 }}>{key}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--txt-0)', marginBottom: 4 }}>{key}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <ZoneChip zone={z} /><span style={{ fontFamily: 'var(--mono)', color: '#3c5366' }}>{(score ?? 0).toFixed(1)}</span>
+                    <ZoneChip zone={z} /><span style={{ fontFamily: 'var(--mono)', color: 'var(--txt-1)' }}>{(score ?? 0).toFixed(1)}</span>
                   </div>
                   <div className="muted" style={{ fontSize: '.68rem' }}>value {n0(v.value)} (summed across LGAs){hasHistory && curMonth ? ` · ${curMonth.label}` : ''}</div>
                 </div>
               )
             }
-            const key = `${hover.object.properties.st}|||${hover.object.properties.lga}`
+            const key = lgaKeyFor(hover.object.properties.st, hover.object.properties.lga)
             const v = lgaMap[key]; if (!v) return null
             const z = zoneFor(key)
             const score = scoreFor(key)
             return (
-              <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: '#fff', border: '1px solid #d7e1e8',
+              <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: 'var(--bg-2)', border: '1px solid var(--border)',
                 borderRadius: 8, padding: '9px 12px', fontSize: '.76rem', boxShadow: '0 8px 24px rgba(15,34,48,.16)', zIndex: 5, minWidth: 160 }}>
-                <div style={{ fontWeight: 700, color: '#0f2230', marginBottom: 4 }}>{hover.object.properties.lga}</div>
+                <div style={{ fontWeight: 700, color: 'var(--txt-0)', marginBottom: 4 }}>{hover.object.properties.lga}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <ZoneChip zone={z} /><span style={{ fontFamily: 'var(--mono)', color: '#3c5366' }}>{(score ?? 0).toFixed(1)}</span>
+                  <ZoneChip zone={z} /><span style={{ fontFamily: 'var(--mono)', color: 'var(--txt-1)' }}>{(score ?? 0).toFixed(1)}</span>
                 </div>
                 <div className="muted" style={{ fontSize: '.68rem' }}>value {n0(v.value)} · source zone "{v.zone || '—'}"{hasHistory && curMonth ? ` · ${curMonth.label}` : ''}</div>
               </div>
             )
           })()}
-          <div style={{ position: 'absolute', left: 12, bottom: 12, background: 'rgba(255,255,255,.93)', borderRadius: 8, padding: '8px 11px', fontSize: '.68rem', color: '#3c5366', boxShadow: '0 2px 10px rgba(0,0,0,.08)' }}>
+          <div style={{ position: 'absolute', left: 12, bottom: 12, background: 'rgba(255,255,255,.93)', borderRadius: 8, padding: '8px 11px', fontSize: '.68rem', color: 'var(--txt-1)', boxShadow: '0 2px 10px rgba(0,0,0,.08)' }}>
             <div style={{ fontWeight: 700, marginBottom: 5 }}>Hotspot zone</div>
             {ZONE_ORDER.map(z => (<div key={z} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: ZONES[z].c }} />{z}</div>))}
           </div>
@@ -410,10 +656,10 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
             <div key={c.key} onClick={() => setSelKey(c.key)} style={{ cursor: 'pointer',
               border: selKey === c.key ? `2px solid ${ZONES[c.canonZone].c}` : '1px solid var(--border)', borderRadius: 10, padding: '11px 13px',
               borderLeft: `4px solid ${ZONES[c.canonZone].c}`, background: 'var(--bg-1)' }}>
-              <div style={{ fontWeight: 700, fontSize: '.84rem', color: '#0f2230', marginBottom: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.lga || c.state}</div>
-              {c.lga && <div style={{ fontSize: '.7rem', color: '#64798a', marginBottom: 6 }}>{c.state}</div>}
+              <div style={{ fontWeight: 700, fontSize: '.84rem', color: 'var(--txt-0)', marginBottom: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.lga || c.state}</div>
+              {c.lga && <div style={{ fontSize: '.7rem', color: 'var(--txt-2)', marginBottom: 6 }}>{c.state}</div>}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><ZoneChip zone={c.canonZone} /></div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#3c5366', marginTop: 8 }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: 'var(--txt-1)', marginTop: 8 }}>
                 value {n0(c.value)} · burden <b style={{ color: ZONES[c.canonZone].t }}>{(c.burden_score ?? 0).toFixed(1)}</b>
               </div>
             </div>
@@ -424,10 +670,10 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel }) {
   )
 }
 
-export default function VisualOverview({ data, variant = 'after', allLgas = false, disease = 'malaria' }) {
+export default function VisualOverview({ data, variant = 'after', allLgas = false, disease = 'malaria', deepDiveItems, activeView, onNavigate }) {
   if (disease !== 'malaria') {
     const label = data?.meta?.label || disease
-    return <StaticZoneMap disease={disease} label={label} variant={variant} />
+    return <StaticZoneMap disease={disease} label={label} variant={variant} deepDiveItems={deepDiveItems} activeView={activeView} onNavigate={onNavigate} />
   }
   const [statesGeo, setStatesGeo] = useState(null)
   const [lgasGeo, setLgasGeo] = useState(null)
@@ -438,14 +684,53 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
   const [vals, setVals] = useState(Object.fromEntries(LEVERS.map(l => [l.id, 0])))
   const [hover, setHover] = useState(null)
   const [view, setView] = useState(NIGERIA)
-  const [cardSort, setCardSort] = useState('zone')
   const [selKey, setSelKey] = useState(null)
+  // The Mechanistic (Ross-Macdonald) factors are NOT a separate section -- they
+  // are additional levers in the SAME "Intervention levers" panel below (one
+  // list of levers, not two parallel systems). "Plan Budget" (see PlanBudget
+  // above) sits directly under the case-trend chart further down this page --
+  // a compact section that prices out whatever scenario is already built
+  // here, not a separate SARIMAX-run tab -- Budget Planning no longer has its
+  // own top-level nav tab.
+  const [showBreakdown, setShowBreakdown] = useState(false)
+
+  // Mechanistic sliders (0-100). IPTp starts `null` ("not yet touched") so the
+  // first backend response seeds it from this location's REAL reported IPTp
+  // rate. IRS and vaccine coverage have NO real per-LGA data anywhere (see
+  // ross_macdonald.py) -- rather than seed them from an arbitrary illustrative
+  // national baseline, they start at a neutral 50 (the middle of the slider)
+  // and every increment/decrement still runs through the real Ross-Macdonald
+  // equations -- a genuine "what if this were the coverage" assessment, built
+  // logically from theory even though there's no measured number to anchor to.
+  const [itn, setItn] = useState(40)
+  const [actMech, setActMech] = useState(45)
+  const [irs, setIrs] = useState(50)
+  const [iptpMech, setIptpMech] = useState(null)
+  // The value iptpMech was last SEEDED to (this location's real reported
+  // rate) -- iptpMech itself changes the instant the user drags the slider,
+  // so comparing iptpMech to this seed (not to a fixed constant) is the only
+  // way to tell "user actually moved this" apart from "just loaded".
+  const [iptpMechSeed, setIptpMechSeed] = useState(null)
+  const [vaccine, setVaccine] = useState(50)
+  const [mech, setMech] = useState(null)
+  const [mechErr, setMechErr] = useState(null)
+  // Demographic what-if levers (% change vs the area's real numbers). Population
+  // scales cases roughly linearly (weighted 0.8 — more people, more infections,
+  // but sub-linear once you account for shared vector pools). Density flows
+  // through the mechanistic model: denser settlements DILUTE mosquitoes-per-
+  // person (Ross-Macdonald density_dilution), so more density LOWERS per-person
+  // transmission. Both start at 0 (= the real value, no change).
+  const [popPct, setPopPct] = useState(0)
+  const [densPct, setDensPct] = useState(0)
 
   useEffect(() => {
     fetch(`${BASE}data/geo/states.geojson`).then(r => r.json()).then(setStatesGeo).catch(() => {})
     fetch(`${BASE}data/geo/lgas.geojson`).then(r => r.json()).then(setLgasGeo).catch(() => {})
   }, [])
-  useEffect(() => { setBurden(null); fetch(`${BASE}data/${variant}/burden.json`).then(r => r.json()).then(setBurden).catch(() => {}) }, [variant])
+  // no-store: this is the same file the MalariaIQ Dashboard reads -- never
+  // trust a stale browser cache of it, so the two views can't silently drift
+  // apart after burden.json is regenerated.
+  useEffect(() => { setBurden(null); fetch(`${BASE}data/${variant}/burden.json`, { cache: 'no-store' }).then(r => r.json()).then(setBurden).catch(() => {}) }, [variant])
 
   const months = burden?.months || []
   const fieldsAll = burden?.fields || []
@@ -459,6 +744,52 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
   // hidden for actual months and the map falls back to the unmodified baseline.
   const showLevers = !!curMonth.forecast
 
+  // Mechanistic (Ross-Macdonald) location: whichever state/LGA the map is
+  // currently focused on, mapped onto the same level/lga shape the backend
+  // expects. Falls back to National when nothing is selected yet.
+  const mechLevel = scope === 'lgas' ? (selState || (selKey ? selKey.split('|||')[0] : 'National')) : (selKey || 'National')
+  const mechLga = scope === 'lgas' && selKey ? selKey.split('|||')[1] : null
+  const mechLocLabel = mechLga ? `${mechLga}, ${mechLevel}` : (mechLevel === 'National' ? 'Nigeria (national)' : mechLevel)
+
+  useEffect(() => {
+    let live = true
+    // IRS/vaccine always send an explicit value (fixed 50 default, or
+    // wherever the user has moved them) -- never fall back to the backend's
+    // own illustrative baseline, so the slider position is always the truth.
+    const body = { level: mechLevel, lga: mechLga, itn_coverage: itn / 100, act_coverage: actMech / 100,
+                   irs_coverage: irs / 100, vaccine_coverage: vaccine / 100,
+                   pop_density_scale: 1 + densPct / 100 }
+    if (iptpMech != null) body.iptp_coverage = iptpMech / 100
+    fetch(`${API_BASE}/whatif-mechanistic`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(async r => {
+      const d = await r.json().catch(() => null)
+      if (!r.ok) throw new Error((d && d.detail) || `HTTP ${r.status}`)
+      return d
+    }).then(d => {
+      if (!live) return
+      setMech(d); setMechErr(null)
+      if (d.available !== false && d.inputs && iptpMech == null && d.inputs.iptp_coverage != null) {
+        const seeded = Math.round(d.inputs.iptp_coverage * 100)
+        setIptpMech(seeded); setIptpMechSeed(seeded)
+      }
+    }).catch(e => { if (live) { setMechErr(String(e.message || e)); setMech(null) } })
+    return () => { live = false }
+  }, [mechLevel, mechLga, itn, irs, actMech, iptpMech, vaccine, densPct])
+
+  // reset ONLY the "not yet touched" real-data slider (IPTp) whenever the
+  // location changes, so a new LGA's own real reported rate gets picked up
+  // again. IRS/vaccine keep whatever position the user left them at -- they
+  // have no per-LGA "real" value to re-seed from anyway.
+  useEffect(() => { setIptpMech(null); setIptpMechSeed(null) }, [mechLevel, mechLga])
+
+  const mechValid = !!(mech && mech.available !== false && mech.baseline && mech.scenario)
+  const mechMult = mechValid ? mech.case_multiplier : 1
+  // Population lever: direct case scaling (weight 0.8). Density's effect is
+  // already inside mechMult (it changed pop_density in the mechanistic call).
+  const popMult = Math.max(0.1, 1 + (popPct / 100) * 0.8)
+
   const inputsFor = (store, key) => {
     const a = store?.[key]; if (!a) return null
     const o = {}; for (const f of fieldsAll) o[f] = a[f] ? (a[f][monthIdx] ?? 0) : 0
@@ -471,16 +802,76 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
       return statesGeo.features.map(f => ({ key: f.properties.st, name: f.properties.st, x: inputsFor(burden.states, f.properties.st) })).filter(u => u.x)
     if (scope === 'lgas' && lgasGeo) {
       const fs = lgasGeo.features.filter(f => !selState || f.properties.st === selState)
-      return fs.map(f => { const k = `${f.properties.st}|||${f.properties.lga}`; return { key: k, name: f.properties.lga, st: f.properties.st, x: inputsFor(burden.lgas, k) } }).filter(u => u.x)
+      // Dedupe by (aliased) key: ~32 LGAs are riverine/multi-part polygons
+      // split into 2+ separate geojson features (e.g. Nembe, Yola North) --
+      // without deduping, each polygon piece became its own scoring unit,
+      // double-counting that LGA in every zone tally. lgaKeyFor() also
+      // reconciles the ~30 LGAs whose geojson spelling differs from
+      // burden.json's (see ../lgaAlias) so they actually join to their data
+      // instead of silently dropping out.
+      // (Plain object, not `new Map()` -- `Map` is shadowed in this file by
+      // the react-map-gl <Map> component import.)
+      const seen = {}
+      fs.forEach(f => {
+        const k = lgaKeyFor(f.properties.st, f.properties.lga)
+        if (!seen[k]) seen[k] = { key: k, name: f.properties.lga, st: f.properties.st, x: inputsFor(burden.lgas, k) }
+      })
+      return Object.values(seen).filter(u => u.x)
     }
     return []
   }, [burden, scope, statesGeo, lgasGeo, selState, monthIdx])
 
+  // ALL LGAs nationally, regardless of the current selState drill-down --
+  // used ONLY as a stable, always-national reference for peer-average and
+  // raw-score normalisation (see below). Without this, drilling into one
+  // state would silently re-baseline "peer average" and "worst LGA" to just
+  // THAT state's own ~10-30 LGAs, so even a genuinely low-burden state's
+  // least-bad LGA could look like the worst in the country -- the same class
+  // of bug the facility-level score was fixed for earlier (anchoring to a
+  // local peer group makes relative severity look absolute).
+  const allLgaUnits = useMemo(() => {
+    if (!burden?.lgas || !lgasGeo) return []
+    // Same dedupe + alias treatment as `units` above -- this feeds peerAvg and
+    // rawRange, so double-counted/unmatched LGAs would otherwise skew the
+    // national normalisation, not just the display counts. Plain object, not
+    // `new Map()` -- `Map` is shadowed here by the react-map-gl <Map> import.
+    const seen = {}
+    lgasGeo.features.forEach(f => {
+      const k = lgaKeyFor(f.properties.st, f.properties.lga)
+      if (!seen[k]) seen[k] = { key: k, x: inputsFor(burden.lgas, k) }
+    })
+    return Object.values(seen).filter(u => u.x)
+  }, [burden, lgasGeo, monthIdx])
+
   const unitMap = useMemo(() => Object.fromEntries(units.map(u => [u.key, u])), [units])
-  const peerAvg = useMemo(() => units.length ? units.reduce((a, u) => a + (u.x.cases || 0), 0) / units.length : 0, [units])
+  // Peer average: for LGAs, ALWAYS the national LGA average (not just the
+  // currently-drilled-into state's LGAs) -- "connected equally" across the
+  // whole map, not re-baselined per state.
+  const peerAvg = useMemo(() => {
+    const src = scope === 'lgas' ? allLgaUnits : units
+    return src.length ? src.reduce((a, u) => a + (u.x.cases || 0), 0) / src.length : 0
+  }, [scope, units, allLgaUnits])
   const flags = burden?.flags || {}
-  const baseZ = useMemo(() => buildZones(units, peerAvg, flags), [units, peerAvg, flags])
-  const scenZ = useMemo(() => buildZones(units.map(u => ({ key: u.key, x: applyLevers(u.x, vals) })), peerAvg, flags), [units, peerAvg, vals, flags])
+  // Raw-score normalisation range: also always national for LGAs, so the
+  // Red/Amber/Yellow bands reflect genuine nationwide severity, not "worst of
+  // whichever subset happens to be on screen."
+  const rawRange = useMemo(() => {
+    const src = scope === 'lgas' ? allLgaUnits : units
+    if (!src.length) return null
+    const raws = src.map(u => scoreDetail(u.x, peerAvg, flags).raw)
+    return [Math.min(...raws), Math.max(...raws)]
+  }, [scope, units, allLgaUnits, peerAvg, flags])
+  const baseZ = useMemo(() => buildZones(units, peerAvg, flags, rawRange), [units, peerAvg, flags, rawRange])
+  // Scenario zones fold in BOTH lever systems: the empirical per-field changes
+  // (applyLevers) AND the mechanistic + population case multiplier, applied to
+  // each unit's case count. Because rawRange is anchored to the BASELINE range,
+  // scaling scenario cases down/up genuinely shifts each area's normalised
+  // score, so moving the Ross-Macdonald / population levers now repaints the
+  // map, not just the selected-area breakdown.
+  const scenZ = useMemo(() => buildZones(units.map(u => {
+    const lx = applyLevers(u.x, vals)
+    return { key: u.key, x: { ...lx, cases: (lx.cases || 0) * mechMult * popMult } }
+  }), peerAvg, flags, rawRange), [units, peerAvg, vals, flags, rawRange, mechMult, popMult])
   // What's actually displayed: scenario zones on forecast months, plain baseline on actual months.
   const dispZ = showLevers ? scenZ : baseZ
 
@@ -493,10 +884,19 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
       if (L.agg === 'sum') o[L.field] = sts.reduce((a, s) => a + (s[L.field] || 0), 0)
       else o[L.field] = sts.length ? sts.reduce((a, s) => a + (s[L.field] || 0), 0) / sts.length : 0
     }
+    // population/density aren't levers (nothing to slide), but are shown as
+    // location-baseline context per manager request -- population sums
+    // across states (national total), density is the national average.
+    o.population = sts.reduce((a, s) => a + (s.population || 0), 0)
+    o.pop_density = sts.length ? sts.reduce((a, s) => a + (s.pop_density || 0), 0) / sts.length : 0
     return o
   }, [burden, scope, selState, monthIdx, statesGeo])
 
-  const colorVer = useMemo(() => JSON.stringify(vals) + scope + (selState || '') + monthIdx, [vals, scope, selState, monthIdx])
+  // Include mechMult + popMult so the deck.gl layer's getFillColor actually
+  // re-runs when the Ross-Macdonald / population levers move (they change scenZ
+  // but not `vals`, so without this the map would keep its old colours).
+  const colorVer = useMemo(() => JSON.stringify(vals) + scope + (selState || '') + monthIdx + ':' + mechMult.toFixed(3) + ':' + popMult.toFixed(3),
+    [vals, scope, selState, monthIdx, mechMult, popMult])
 
   const layers = useMemo(() => {
     const fillFor = key => { const z = dispZ[key]; const Z = ZONES[z ? z.zone : 'Not a Hotspot']; return [...Z.fill, Z.a] }
@@ -510,9 +910,9 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
     if (scope === 'lgas' && lgasGeo) {
       const dat = selState ? { ...lgasGeo, features: lgasGeo.features.filter(f => f.properties.st === selState) } : lgasGeo
       return [new GeoJsonLayer({ id: 'lgas', data: dat, pickable: true, stroked: true, filled: true,
-        getFillColor: f => fillFor(`${f.properties.st}|||${f.properties.lga}`), getLineColor: [255,255,255], lineWidthMinPixels: 0.4,
+        getFillColor: f => fillFor(lgaKeyFor(f.properties.st, f.properties.lga)), getLineColor: [255,255,255], lineWidthMinPixels: 0.4,
         updateTriggers: { getFillColor: colorVer },
-        onClick: info => info.object && setSelKey(`${info.object.properties.st}|||${info.object.properties.lga}`),
+        onClick: info => info.object && setSelKey(lgaKeyFor(info.object.properties.st, info.object.properties.lga)),
         onHover: info => setHover(info.object ? { ...info, kind: 'lga' } : null) })]
     }
     return []
@@ -528,7 +928,17 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
   function backToStates() { setSelState(null); setScope('states'); setSelKey(null); setView({ ...NIGERIA, transitionDuration: 600 }) }
 
   const setLever = (id, v) => setVals(s => ({ ...s, [id]: v }))
-  const reset = () => setVals(Object.fromEntries(LEVERS.map(l => [l.id, 0])))
+  // Was only resetting the empirical levers + population/density -- the 5
+  // Mechanistic (Ross-Macdonald) sliders (ITN, IRS, ACT effectiveness, IPTp,
+  // Vaccine) kept whatever position the user left them at, so the case-trend
+  // line/numbers (which factor in mechMult from those sliders too) never
+  // fully returned to baseline. Reset every lever on the page now.
+  const reset = () => {
+    setVals(Object.fromEntries(LEVERS.map(l => [l.id, 0])))
+    setPopPct(0); setDensPct(0)
+    setItn(40); setActMech(45); setIrs(50); setVaccine(50)
+    setIptpMech(null); setIptpMechSeed(null)   // re-seeds from this location's real reported rate
+  }
   const scaleUp = () => setVals({ rain: -30, temp: 0, hum: -20, act: 60, llin: 80 })
 
   const dist = useMemo(() => {
@@ -537,43 +947,82 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
     return d
   }, [units, baseZ, dispZ])
 
-  const cards = useMemo(() => {
-    const arr = units.map(u => {
-      const b = baseZ[u.key] || { display: 0, zone: 'Not a Hotspot' }
-      const s = dispZ[u.key] || { display: 0, zone: 'Not a Hotspot' }
-      return { name: u.name, key: u.key, base: b, scen: s, delta: s.display - b.display }
-    })
-    if (cardSort === 'change') arr.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || b.scen.display - a.scen.display)
-    else arr.sort((a, b) => b.scen.display - a.scen.display)
-    return arr
-  }, [units, baseZ, dispZ, cardSort])
-
-  useEffect(() => { if (cards.length && (!selKey || !unitMap[selKey])) setSelKey(cards[0].key) }, [cards, unitMap])
+  // No auto-selection: stay on the NATIONAL aggregate (map fully zoomed out,
+  // no area highlighted) until the user explicitly clicks a state or LGA --
+  // previously this silently jumped to whichever area ranked #1 by burden
+  // (e.g. "Kaduna") the moment the tab opened, which read as an arbitrary,
+  // unexplained default rather than "nothing selected yet".
+  useEffect(() => { if (selKey && !unitMap[selKey]) setSelKey(null) }, [unitMap, selKey])
 
   const hotBase = (dist.base['Red'] || 0) + (dist.base['Amber'] || 0)
   const hotScen = (dist.scen['Red'] || 0) + (dist.scen['Amber'] || 0)
   const ready = (scope === 'states' && statesGeo) || (scope === 'lgas' && lgasGeo)
   const cats = [...new Set(LEVERS.map(l => l.cat))]
-  const cardCap = allLgas ? 150 : 9999
 
   const sel = selKey && unitMap[selKey] ? unitMap[selKey] : null
-  const selScenX = sel ? (showLevers ? applyLevers(sel.x, vals) : sel.x) : null
+  // Mechanistic sliders scale the case input too, so the selected area's
+  // score/calculation-breakdown responds to ALL levers in the one panel, not
+  // just the empirical ones.
+  const selScenX = sel ? (showLevers ? { ...applyLevers(sel.x, vals), cases: (sel.x.cases || 0) * mechMult * popMult } : sel.x) : null
   const selDetail = sel ? scoreDetail(selScenX, peerAvg, flags) : null
   const selZ = sel ? dispZ[sel.key] : null
   const selBaseZ = sel ? baseZ[sel.key] : null
 
+  // ── Case-trend chart: NATIONAL aggregate until a state/LGA is explicitly
+  // selected (no arbitrary "pick the #1 area" default), then the selected
+  // area's own series. SAME lever state (`vals` + mechanistic sliders) that
+  // recolours the map above also drives this chart's scenario line -- one
+  // control surface, two live views (map + graph), combining the empirical
+  // elasticity model AND the mechanistic Ross-Macdonald model multiplicatively.
+  // Whatever is CURRENTLY IN VIEW, for the trend chart: an explicitly clicked
+  // LGA/state if `selKey` is set; otherwise, if the map has been drilled into
+  // a state (scope 'lgas' with `selState` but no specific LGA clicked yet),
+  // that STATE's own aggregate -- NOT the national total. Previously this
+  // fell through to the national series the moment you drilled into a state
+  // (selKey stayed null), so the graph kept showing Nigeria-wide cases and the
+  // lever multiplier got applied to the WRONG (much larger) base -- which is
+  // also why "cases averted" read in the millions for a single state/LGA.
+  const rawSel = selKey
+    ? (scope === 'states' ? burden?.states?.[selKey] : burden?.lgas?.[selKey])
+    : (scope === 'lgas' && selState ? burden?.states?.[selState] : null)
+  const nationalCases = useMemo(() => {
+    if (!burden?.states || !months.length) return null
+    const sts = Object.values(burden.states)
+    return months.map((_, i) => sts.reduce((a, s) => a + (typeof s.cases?.[i] === 'number' ? s.cases[i] : 0), 0))
+  }, [burden, months.length])
+  const trendMult = useMemo(() => caseMultiplier(vals, scopeBaseline, data?.drivers?.meta), [vals, scopeBaseline, data])
+  const combinedMult = trendMult * mechMult * popMult
+  const trendLabel = sel ? sel.name : (scope === 'lgas' && selState ? selState : 'Nigeria (national)')
+  const trendData = useMemo(() => {
+    const casesArr = rawSel?.cases || nationalCases
+    if (!casesArr || !months.length) return []
+    return months.map((m, i) => {
+      const c = casesArr[i]
+      const base = (typeof c === 'number') ? Math.round(c) : null
+      return { date: m.ym, Baseline: base, Scenario: (m.forecast && base != null) ? Math.round(base * combinedMult) : base }
+    })
+  }, [rawSel, nationalCases, months, combinedMult])
+  const firstForecastYm = months.find(m => m.forecast)?.ym
+  const trendFc = trendData.filter((_, i) => months[i]?.forecast)
+  const trendBaseTotal = trendFc.reduce((a, r) => a + (r.Baseline || 0), 0)
+  const trendScenTotal = trendFc.reduce((a, r) => a + (r.Scenario || 0), 0)
+  const trendAverted = trendBaseTotal - trendScenTotal
+
   return (
     <>
-      <div className="view-head">
-        <h2>{allLgas ? 'Visual Overview — All LGAs' : 'Visual Overview'}
-          <InfoTip w={320} title="What this map shows"
-            text={allLgas
-              ? 'Every one of Nigeria’s 768 local government areas (LGAs) coloured by malaria hotspot zone, all at once. No need to click into a state. Use the month slider to watch hotspots grow in the rainy season, and the levers to test interventions.'
-              : 'Nigeria coloured by malaria hotspot zone. Start with 37 states; click any state to drill into its LGAs. Use the month slider to move through time and the levers to test interventions.'} />
-        </h2>
-        <p>Hotspot zones (🔴 Red · 🟠 Amber · 🟡 Yellow · 🟢 Green · ⚪ Not a Hotspot) come from a burden score built on disease load,
-          transmission risk, vector environment & protection gaps. {allLgas ? 'All LGAs are shown together.' : 'Click a state to drill into its LGAs.'} Move the
-          levers — each area recomputes live and the map repaints.</p>
+      <div className="view-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
+        <div>
+          <h2>{allLgas ? 'Visual Overview — All LGAs' : 'Visual Overview'}
+            <InfoTip w={320} title="What this map shows"
+              text={allLgas
+                ? 'Every one of Nigeria’s 768 local government areas (LGAs) coloured by malaria hotspot zone, all at once. No need to click into a state. Use the month slider to watch hotspots grow in the rainy season, and the levers to test interventions.'
+                : 'Nigeria coloured by malaria hotspot zone. Start with 37 states; click any state to drill into its LGAs. Use the month slider to move through time and the levers to test interventions.'} />
+          </h2>
+          <p>Hotspot zones (🔴 Red · 🟠 Amber · 🟡 Yellow · 🟢 Green · ⚪ Not a Hotspot) come from a burden score built on disease load,
+            transmission risk, vector environment & protection gaps. {allLgas ? 'All LGAs are shown together.' : 'Click a state to drill into its LGAs.'} Move the
+            levers — each area recomputes live and the map repaints.</p>
+        </div>
+        <DeepDiveMenu items={deepDiveItems} activeView={activeView} onNavigate={onNavigate} />
       </div>
 
       {!allLgas && (
@@ -594,13 +1043,13 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
       <Card style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 200 }}>
-            <div style={{ fontSize: '.72rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#64798a', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+            <div style={{ fontSize: '.72rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--txt-2)', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
               Time period
               <InfoTip w={300} title="Actual vs forecast"
                 text="The data is monthly. This slider picks which month the map shows. Months up to Dec 2025 are ACTUAL reported data; 2026 months are a FORECAST built from the typical seasonal pattern. Notice how the hotspots grow in the rainy season (Jun–Oct) and ease in the dry months." />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: '1.3rem', fontWeight: 600, color: '#0f2230' }}>{curMonth.label}</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: '1.3rem', fontWeight: 600, color: 'var(--txt-0)' }}>{curMonth.label}</span>
               <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: '.66rem', fontWeight: 700,
                 background: curMonth.forecast ? 'rgba(217,119,6,.14)' : 'rgba(13,148,136,.14)',
                 color: curMonth.forecast ? COLORS.amber : COLORS.accent,
@@ -616,7 +1065,7 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
               onChange={e => setMonthIdx(+e.target.value)} />
             <button className="btn" onClick={() => setMonthIdx(i => Math.min(months.length - 1, i + 1))} style={{ padding: '6px 11px' }}>›</button>
           </div>
-          <div style={{ fontSize: '.72rem', color: '#64798a', maxWidth: 230, lineHeight: 1.5 }}>
+          <div style={{ fontSize: '.72rem', color: 'var(--txt-2)', maxWidth: 230, lineHeight: 1.5 }}>
             🌧️ Rainy season (Jun–Oct) → more breeding → more hotspots. Slide across the year to see it.
           </div>
         </div>
@@ -632,6 +1081,47 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
               <button className="btn" onClick={scaleUp}>Scale-up interventions</button>
               <button className="btn" onClick={reset}>↺ Reset</button>
             </div>
+            {(() => {
+              // Population & density are now LEVERS (per request): the selected
+              // area's OWN real numbers when one is picked, else the current
+              // state/national aggregate, shown as the baseline that the % change
+              // is applied to. Population scales cases directly (popMult, weight
+              // 0.8); density feeds the Ross-Macdonald dilution term via the
+              // mechanistic call, so denser -> lower per-person transmission.
+              const pop = sel ? (sel.x.population || 0) : (scopeBaseline.population || 0)
+              const dens = sel ? (sel.x.pop_density || 0) : (scopeBaseline.pop_density || 0)
+              if (!(pop > 0 || dens > 0)) return null
+              const demog = [
+                { key: 'pop', emoji: '👥', label: 'Population', val: popPct, set: setPopPct, base: pop, unit: '', fmtV: fmt,
+                  info: 'Change the number of people. More people → more cases (weighted ×0.8, sub-linear). Scales the case forecast and every area’s burden-score case-volume factor.' },
+                { key: 'dens', emoji: '🏙️', label: 'Population density', val: densPct, set: setDensPct, base: dens, unit: '/km²', fmtV: n0,
+                  info: 'Change how densely those people live. Denser settlements DILUTE mosquitoes-per-person in the Ross-Macdonald model, so higher density LOWERS per-person transmission — a genuinely different effect from raw population.' },
+              ]
+              return (
+                <div style={{ marginBottom: 6 }}>
+                  <div className="cat-label">👥 Population &amp; density</div>
+                  {demog.map(d => {
+                    const scenV = (d.base || 0) * (1 + d.val / 100)
+                    return (
+                      <div className="lever" key={d.key}>
+                        <div className="lever-head">
+                          <span className="name">{d.emoji} {d.label}<InfoTip text={d.info} /></span>
+                          <span className="val">{d.val >= 0 ? '+' : ''}{d.val}%</span>
+                        </div>
+                        <input type="range" min={-80} max={200} step={5} value={d.val}
+                          style={{ '--pct': ((d.val + 80) / 280 * 100) + '%' }}
+                          onChange={e => d.set(+e.target.value)} />
+                        <div className="lever-base">
+                          baseline <b>{d.fmtV(d.base || 0)}</b>{d.unit}
+                          {d.val !== 0 && <> → <b style={{ color: COLORS.accent }}>{d.fmtV(scenV)}</b>{d.unit}</>}
+                          <span className="muted" style={{ marginLeft: 4 }}>({sel ? sel.name : (scope === 'states' ? 'national' : selState || 'all LGAs')})</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
             {cats.map(cat => (
               <div key={cat}>
                 <div className="cat-label">{cat}</div>
@@ -641,6 +1131,7 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
                   let scenV = baseV * (1 + pct / 100)
                   if (l.field === 'temp') scenV = cl(scenV, 15, 45)
                   if (l.field === 'hum') scenV = cl(scenV, 0, 100)
+                  if (l.field === 'ipt_cov') scenV = cl(scenV, 0, 100)
                   return (
                     <div className="lever" key={l.id}>
                       <div className="lever-head">
@@ -660,6 +1151,60 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
                 })}
               </div>
             ))}
+
+            {/* ── Mechanistic (Ross-Macdonald) factors -- SAME panel, not a separate
+                 section: these are additional levers, driven by a theory-based
+                 model (population density, PfPR, NDVI, etc.) instead of fitted
+                 elasticities. Their effect is combined into the SAME map score
+                 (selected area) and graph as the empirical levers above. ── */}
+            <div className="cat-label">🦟 Mechanistic (Ross-Macdonald)
+              <InfoTip w={400} title="A second, theory-driven model" text="These levers do NOT use statistical elasticities (that's everything above). They run the classic Ross-Macdonald vectorial-capacity / R0 equations for malaria transmission, using the SELECTED area's real population density, PfPR, poverty/education deprivation, NDVI and IPTp1 coverage. Their effect combines multiplicatively with the empirical levers above to scale the case forecast and the selected area's score. Literature/WHO default parameters where no per-LGA data exists -- not fit to this dataset." /></div>
+            {mechErr && <div className="muted" style={{ fontSize: '.78rem', marginBottom: 10 }}>Mechanistic model unavailable: {mechErr}</div>}
+            {[
+              ['ITN / LLIN use', itn, setItn, 'Bednet use: deters biting and kills mosquitoes on contact'],
+              ['IRS coverage', irs, setIrs, 'No per-LGA IRS data exists anywhere, so this starts at a neutral 50 (not a real baseline) -- move it to ask "what if IRS coverage were higher/lower here", still computed through the real Ross-Macdonald equations'],
+              ['Effective ACT treatment', actMech, setActMech, 'Shortens the infectious period; discounted by this area’s socioeconomic access factor'],
+              ['IPTp coverage (pregnant women)', iptpMech, setIptpMech, 'Starts at this area’s own reported rate (real data). Scoped to pregnant women only (~4.4% of population)'],
+              ['Vaccine / child immunisation', vaccine, setVaccine, 'No per-LGA vaccine coverage data exists, so this starts at a neutral 50 (not a real baseline) -- a logical "what if" lever, not a measured one. Scoped to under-5 children only (~17.5% of population)'],
+            ].map(([label, val, setVal, hint]) => {
+              const v = val ?? 0
+              return (
+                <div className="lever" key={label}>
+                  <div className="lever-head">
+                    <span className="name">{label}</span>
+                    <span className="val">{val == null ? '…' : `${v}%`}</span>
+                  </div>
+                  <input type="range" min={0} max={100} value={v} step={1}
+                    style={{ '--pct': v + '%' }} onChange={e => setVal(+e.target.value)} />
+                  <div className="lever-desc">{hint}</div>
+                </div>
+              )
+            })}
+
+            {mechValid && (
+              <div style={{ marginTop: 10 }}>
+                <div className="cat-label">Location context ({mechLocLabel})
+                  <InfoTip w={360} title="Where each number comes from" text="Population/PfPR/poverty/education/IPTp1/RDT are real warehouse-sourced data for this location. Pregnant-women and under-5 population are NOT measured per-LGA -- Nigeria doesn't publish that -- so they're derived from population x standard national demographic shares." /></div>
+                <table className="data" style={{ fontSize: '.76rem' }}>
+                  <tbody>
+                    {mech.context?.population && <tr><td>Population</td><td className="num">{fmt(mech.context.population.value)}</td></tr>}
+                    <tr><td>Population density</td><td className="num">{mech.inputs?.pop_density ? `${Math.round(mech.inputs.pop_density).toLocaleString()}/km²` : 'n/a'}</td></tr>
+                    {mech.context?.infected_population_estimate && <tr><td>Infected population (est.)</td><td className="num">{fmt(mech.context.infected_population_estimate.value)}</td></tr>}
+                    {mech.context?.pregnant_women_population && <tr><td>Pregnant women (est.)</td><td className="num">{fmt(mech.context.pregnant_women_population.value)}</td></tr>}
+                    {mech.context?.under5_population && <tr><td>Children under 5 (est.)</td><td className="num">{fmt(mech.context.under5_population.value)}</td></tr>}
+                    {mech.context?.socioeconomic_vulnerability_index && <tr><td>Socioeconomic vulnerability</td><td className="num">{mech.context.socioeconomic_vulnerability_index.value}/100</td></tr>}
+                    {mech.context?.iptp1_coverage_real && <tr><td>IPTp coverage (reported)</td><td className="num">{mech.context.iptp1_coverage_real.value}%</td></tr>}
+                    {mech.context?.rdt_tests_per_month && <tr><td>RDT tests/month (reported)</td><td className="num">{fmt(mech.context.rdt_tests_per_month.value)}</td></tr>}
+                  </tbody>
+                </table>
+                <div className="muted" style={{ fontSize: '.72rem', marginTop: 6, lineHeight: 1.6 }}>
+                  Natural R₀ (no control): <b>{(mech.derived?.R0_natural_no_intervention ?? mech.baseline.R0).toFixed(1)}</b> ·
+                  {' '}status-quo→scenario transmission ×<b style={{ color: (mech.derived?.R0_ratio ?? 1) <= 1 ? COLORS.green : COLORS.coral }}>{(mech.derived?.R0_ratio ?? 1).toFixed(2)}</b> ·
+                  {' '}case multiplier ×<b style={{ color: mechMult <= 1 ? COLORS.green : COLORS.coral }}>{mechMult.toFixed(3)}</b>
+                  <InfoTip w={340} text="Natural R₀ is this area's transmission potential with NO control (literature Ross-Macdonald parameters on its real density/temperature/rainfall). The multiplier compares your slider scenario to the sliders' status-quo starting positions — 1.0 means 'no change to the forecast', below 1 means fewer cases." />
+                </div>
+              </div>
+            )}
           </Card>
         )}
 
@@ -667,7 +1212,7 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
         <div className="col" style={{ flex: showLevers ? 2 : 1, minWidth: 460, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!showLevers && (
             <Card style={{ background: 'rgba(13,148,136,.07)', border: '1px solid rgba(13,148,136,.3)' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '.84rem', color: '#0f2230', lineHeight: 1.6 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '.84rem', color: 'var(--txt-1)', lineHeight: 1.6 }}>
                 <span style={{ fontSize: '1.1rem' }}>✓</span>
                 <div>
                   <b>Showing actual reported data for {curMonth.label}.</b> This already happened, so the intervention levers are hidden — there's nothing to simulate against real history.
@@ -684,7 +1229,7 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
                 <div style={{ fontSize: '.64rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: ZONES[z].t, display: 'flex', alignItems: 'center' }}>
                   {z}<InfoTip text={ZONE_INFO[z]} />
                 </div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: '1.5rem', color: '#0f2230', marginTop: 4 }}>{dist.scen[z] || 0}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: '1.5rem', color: 'var(--txt-0)', marginTop: 4 }}>{dist.scen[z] || 0}</div>
                 {(dist.scen[z] || 0) !== (dist.base[z] || 0) && (
                   <div style={{ fontSize: '.68rem', fontWeight: 600, color: (dist.scen[z] - dist.base[z]) < 0 ? COLORS.green : COLORS.coral }}>
                     {(dist.scen[z] - dist.base[z]) > 0 ? '+' : ''}{dist.scen[z] - dist.base[z]} vs base
@@ -695,7 +1240,7 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
           </div>
 
           <Card
-            title={<span>{scope === 'states' ? 'Nigeria — hotspot zones by state' : (allLgas ? 'Nigeria — all LGAs' : `${selState} — hotspot zones by LGA`)} · {curMonth.label}
+            title={<span>{scope === 'states' ? 'Nigeria — hotspot zones by state' : (allLgas || !selState ? 'Nigeria — all LGAs' : `${selState} — hotspot zones by LGA`)} · {curMonth.label}
               <InfoTip w={300} text={scope === 'states' ? 'Click a state to drill into its LGAs. Hover any area for its score.' : 'Click any LGA to see exactly how its score was calculated, in the panel below.'} /></span>}
             sub={`Hotspots (Red+Amber): ${hotScen} of ${units.length}${hotScen !== hotBase ? `  ·  was ${hotBase} before levers` : ''}`}
             right={(scope === 'lgas' && !allLgas) ? <button className="btn" onClick={backToStates}>← All states</button> : <span className="chip dot">{allLgas ? `${units.length} LGAs` : '37 states'}</span>}>
@@ -703,18 +1248,18 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
               {!ready && <div className="loading" style={{ height: '100%' }}><div className="spinner" />Loading map…</div>}
               {ready && (
                 <DeckGL viewState={view} controller={true} layers={layers} onViewStateChange={e => setView(e.viewState)} style={{ position: 'absolute', inset: 0 }}>
-                  <Map mapStyle={CARTO} />
+                  <Map mapStyle={BLANK_MAP_STYLE} />
                 </DeckGL>
               )}
               {hover?.object && (() => {
-                const key = hover.kind === 'state' ? hover.object.properties.st : `${hover.object.properties.st}|||${hover.object.properties.lga}`
+                const key = hover.kind === 'state' ? hover.object.properties.st : lgaKeyFor(hover.object.properties.st, hover.object.properties.lga)
                 const b = baseZ[key], s = dispZ[key]; if (!s) return null
                 return (
-                  <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: '#fff', border: '1px solid #d7e1e8',
+                  <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: 'var(--bg-2)', border: '1px solid var(--border)',
                     borderRadius: 8, padding: '9px 12px', fontSize: '.76rem', boxShadow: '0 8px 24px rgba(15,34,48,.16)', zIndex: 5, minWidth: 160 }}>
-                    <div style={{ fontWeight: 700, color: '#0f2230', marginBottom: 4 }}>{hover.kind === 'state' ? hover.object.properties.st : hover.object.properties.lga}</div>
+                    <div style={{ fontWeight: 700, color: 'var(--txt-0)', marginBottom: 4 }}>{hover.kind === 'state' ? hover.object.properties.st : hover.object.properties.lga}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <ZoneChip zone={s.zone} /><span style={{ fontFamily: 'var(--mono)', color: '#3c5366' }}>{s.display.toFixed(1)}</span>
+                      <ZoneChip zone={s.zone} /><span style={{ fontFamily: 'var(--mono)', color: 'var(--txt-1)' }}>{s.display.toFixed(1)}</span>
                     </div>
                     {b && Math.abs(s.display - b.display) > 0.05 && (
                       <div style={{ fontSize: '.7rem', color: (s.display - b.display) < 0 ? COLORS.green : COLORS.coral }}>
@@ -725,12 +1270,54 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
                   </div>
                 )
               })()}
-              <div style={{ position: 'absolute', left: 12, bottom: 12, background: 'rgba(255,255,255,.93)', borderRadius: 8, padding: '8px 11px', fontSize: '.68rem', color: '#3c5366', boxShadow: '0 2px 10px rgba(0,0,0,.08)' }}>
+              <div style={{ position: 'absolute', left: 12, bottom: 12, background: 'rgba(255,255,255,.93)', borderRadius: 8, padding: '8px 11px', fontSize: '.68rem', color: 'var(--txt-1)', boxShadow: '0 2px 10px rgba(0,0,0,.08)' }}>
                 <div style={{ fontWeight: 700, marginBottom: 5, display: 'flex', alignItems: 'center' }}>Hotspot zone<InfoTip text="Colour = severity. Red is worst, grey means not a hotspot. Based on the burden score for the selected month." /></div>
                 {ZONE_ORDER.map(z => (<div key={z} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: ZONES[z].c }} />{z}</div>))}
               </div>
             </div>
           </Card>
+
+          {/* ── CASE TREND: same lever state as the map above, same shared chart ── */}
+          {/* Right column = map, then graph, stacked -- both react to the SAME levers on the left. */}
+          {trendData.length > 0 && (
+            <Card
+              title={<span>{trendLabel} — case trend, baseline vs scenario
+                <InfoTip w={360} title="One control surface" text="This chart uses the EXACT SAME levers as the map above — including the Mechanistic (Ross-Macdonald) factors — move any of them and both the map's colour AND this chart's scenario line update together. Empirical (elasticity) and Mechanistic (Ross-Macdonald) effects are combined multiplicatively: ×{empirical} × ×{mechanistic} = ×{combined}. Applied to forecast months only; history is fixed." /></span>}
+              sub={showLevers ? `Forecast responds to your levers · empirical ×${trendMult.toFixed(3)} · mechanistic ×${mechMult.toFixed(3)} · population ×${popMult.toFixed(3)} · combined ×${combinedMult.toFixed(3)}` : 'Move the time slider to a forecast month to unlock levers'}>
+              {showLevers && (
+                <div className="row" style={{ marginBottom: 14 }}>
+                  <Card className="col" style={{ minWidth: 0, background: 'var(--bg-2)' }}>
+                    <div className="scenario-readout">
+                      <div className="lbl">Scenario cases (forecast)</div>
+                      <div className="big" style={{ fontSize: '1.7rem', color: combinedMult <= 1 ? COLORS.green : COLORS.coral }}>{fmt(trendScenTotal)}</div>
+                      <div className="muted" style={{ fontSize: '.78rem' }}>baseline {fmt(trendBaseTotal)}</div>
+                    </div>
+                  </Card>
+                  <Card className="col" style={{ minWidth: 0, background: 'var(--bg-2)' }}>
+                    <div className="scenario-readout">
+                      <div className="lbl">{trendAverted >= 0 ? 'Cases averted' : 'Additional cases'}</div>
+                      <div className="big" style={{ fontSize: '1.7rem', color: trendAverted >= 0 ? COLORS.green : COLORS.coral }}>{fmt(Math.abs(trendAverted))}</div>
+                      <div className="muted" style={{ fontSize: '.78rem' }}>×{combinedMult.toFixed(3)} vs baseline</div>
+                    </div>
+                  </Card>
+                </div>
+              )}
+              <CompareChart data={trendData} height={250} splitDate={firstForecastYm} splitLabel="Forecast →" series={[
+                { key: 'Baseline', name: 'Baseline forecast', color: COLORS.accent2, dashed: true },
+                { key: 'Scenario', name: 'Scenario (with levers)', color: combinedMult <= 1 ? COLORS.accent : COLORS.coral },
+              ]} />
+              {/* ── PLAN BUDGET: small section directly under the line graph.
+                   Reuses the EXACT scenario already built above (scope +
+                   levers) -- no separate SARIMAX run, no separate
+                   level/state/target picker -- and stays inert until a real,
+                   budget-relevant lever has actually been moved. ── */}
+              {showLevers && !allLgas && (
+                <PlanBudget scope={scope} selState={selState} vals={vals} trendFc={trendFc}
+                  population={sel ? (sel.x.population || 0) : (scopeBaseline.population || 0)} disease={disease}
+                  otherLevers={{ popPct, densPct, itn, irs, actMech, iptpMech, iptpMechSeed, vaccine }} />
+              )}
+            </Card>
+          )}
         </div>
       </div>
 
@@ -740,13 +1327,19 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
           lgaBurden={dispZ[selKey]?.display} lgaZone={dispZ[selKey]?.zone} />
       )}
 
-      {/* ── CALCULATION BREAKDOWN ── */}
+      {/* ── CALCULATION BREAKDOWN (collapsed by default -- the exact numbers,
+           for anyone who wants to audit the maths, not the primary view) ── */}
       {sel && selDetail && selZ && (
-        <Card style={{ marginTop: 18 }}
-          title={<span>How {sel.name}'s burden score was calculated · {curMonth.label}
-            <InfoTip w={320} title="Plain English" text="The score (0–100) adds up weighted points from disease load, transmission risk, weather and protection gaps. Then it’s rank-blended against all other areas and turned into a colour zone. Everything below is that exact maths, using this area’s numbers for the selected month." /></span>}
-          sub={`${curMonth.forecast ? 'Forecast month' : 'Actual data'} · scenario inputs (after levers) feed the same formula`}>
-          <div className="row" style={{ gap: 16 }}>
+        <Card style={{ marginTop: 18 }}>
+          <button className="btn" onClick={() => setShowBreakdown(o => !o)} style={{ width: '100%', textAlign: 'left' }}>
+            {showBreakdown ? '▾' : '▸'} How {sel.name}'s burden score was calculated · {curMonth.label}
+            <span className="muted" style={{ fontWeight: 400, marginLeft: 8, fontSize: '.78rem' }}>
+              {curMonth.forecast ? 'Forecast month' : 'Actual data'} · scenario inputs (after levers) feed the same formula
+            </span>
+          </button>
+          {showBreakdown && (
+          <>
+          <div className="row" style={{ gap: 16, marginTop: 14 }}>
             <div className="col" style={{ minWidth: 260, flex: 1 }}>
               <div className="cat-label">Step 0 · Indicator inputs (baseline → scenario)<InfoTip text="The raw monthly numbers for this area. If you moved a lever, the arrow shows the new value." /></div>
               <table className="data" style={{ fontSize: '.8rem' }}>
@@ -755,7 +1348,7 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
                     ['Temperature (°C)', 'temp'], ['Humidity (%)', 'hum'], ['ACT given/mo', 'act'], ['LLIN nets/mo', 'llin']].map(([lbl, f]) => {
                     const bv = sel.x[f] || 0, sv = selScenX[f] || 0, chg = Math.abs(sv - bv) > 1e-6
                     return (<tr key={f}><td>{lbl}</td><td className="num">{f === 'trend' ? bv.toFixed(2) : n0(bv)}</td>
-                      <td className="num" style={{ color: chg ? COLORS.accent : '#94a8b6' }}>{chg ? '→ ' + (f === 'trend' ? sv.toFixed(2) : n0(sv)) : ''}</td></tr>)
+                      <td className="num" style={{ color: chg ? COLORS.accent : 'var(--txt-3)' }}>{chg ? '→ ' + (f === 'trend' ? sv.toFixed(2) : n0(sv)) : ''}</td></tr>)
                   })}
                 </tbody>
               </table>
@@ -768,58 +1361,40 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
                 <tbody>
                   {selDetail.factors.map((r, i) => (
                     <tr key={i}><td><b>{r.name}</b><div className="muted" style={{ fontSize: '.66rem' }}>{r.formula}</div></td>
-                      <td className="mono" style={{ fontSize: '.7rem', color: '#64798a' }}>{r.subst}</td>
+                      <td className="mono" style={{ fontSize: '.7rem', color: 'var(--txt-2)' }}>{r.subst}</td>
                       <td className="num">{r.sub.toFixed(2)}</td>
                       <td className="num" style={{ color: COLORS.accent }}>{r.points.toFixed(1)}<span className="muted" style={{ fontSize: '.62rem' }}>/{r.w}</span></td></tr>
                   ))}
-                  <tr style={{ background: '#f3f9f8' }}><td colSpan={3}><b>Raw burden = sum of points</b></td><td className="num"><b>{selDetail.raw.toFixed(1)}</b></td></tr>
+                  <tr style={{ background: 'var(--bg-3)' }}><td colSpan={3}><b>Raw burden = sum of points</b></td><td className="num"><b>{selDetail.raw.toFixed(1)}</b></td></tr>
                 </tbody>
               </table>
             </div>
           </div>
-          <div className="method-section" style={{ marginTop: 14, background: '#f8fbfd', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
-            <div className="cat-label" style={{ marginTop: 0 }}>Step 2 · Percentile blend vs all {selZ.n} {scope === 'states' ? 'states' : 'LGAs'} → Step 3 · Zone
-              <InfoTip w={320} text="A high raw score isn’t enough on its own — we also rank this area against all others (60% weight) and blend with its own raw score (40%). That spread-out number is matched to a colour zone." /></div>
+          <div className="method-section" style={{ marginTop: 14, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+            <div className="cat-label" style={{ marginTop: 0 }}>Step 2 · Percentile blend vs all {scope === 'states' ? 'states nationally' : 'LGAs nationally'} → Step 3 · Zone
+              <InfoTip w={340} text="A high raw score isn't enough on its own — we also rank this area against all others (60% weight) and blend with its raw score, MIN-MAX NORMALISED against the actual national range this month (40% weight). Normalising against the real observed range -- not a theoretical 0-100 -- is what lets the genuinely worst areas reach Red instead of capping out around Amber. Always compared to the FULL national set, even when you've drilled into one state, so severity stays comparable nationwide." /></div>
             <p style={{ fontSize: '.82rem', lineHeight: 1.8, margin: '6px 0 0' }}>
               Ranked <b>#{selZ.rankPos} of {selZ.n}</b> by raw burden → rank_pct = <b>{(selZ.rankPct).toFixed(3)}</b><br />
               <code>rank_term = 0.60 × {(selZ.rankPct).toFixed(3)} = {selZ.rankTerm.toFixed(3)}</code><br />
-              <code>raw_term&nbsp; = 0.40 × ({selDetail.raw.toFixed(1)} ÷ 100) = {selZ.rawTerm.toFixed(3)}</code><br />
+              <code>raw_scaled = ({selDetail.raw.toFixed(1)} − {rawRange ? rawRange[0].toFixed(1) : '0.0'}) ÷ ({rawRange ? (rawRange[1] - rawRange[0]).toFixed(1) : '100.0'}) [national range]</code><br />
+              <code>raw_term&nbsp; = 0.40 × raw_scaled = {selZ.rawTerm.toFixed(3)}</code><br />
               <code>display&nbsp;&nbsp; = (rank_term + raw_term) × 100 = <b style={{ color: ZONES[selZ.zone].t }}>{selZ.display.toFixed(1)}</b></code><br />
-              <span style={{ marginTop: 4, display: 'inline-block' }}>Thresholds: &lt;18 None · &lt;38 Green · &lt;58 Yellow · &lt;78 Amber · ≥78 Red →{' '}
+              <span style={{ marginTop: 4, display: 'inline-block' }}>Thresholds: &lt;60 None · &lt;71 Green · &lt;81 Yellow · &lt;91 Amber · ≥91 Red →{' '}
                 <b style={{ color: ZONES[selZ.zone].t }}>{selZ.display.toFixed(1)} → {selZ.zone}</b>
                 {selBaseZ && selBaseZ.zone !== selZ.zone && <> (baseline was <ZoneChip zone={selBaseZ.zone} /> at {selBaseZ.display.toFixed(1)})</>}
               </span>
             </p>
           </div>
+          </>
+          )}
         </Card>
       )}
 
-      {/* ── cards ── */}
-      <Card style={{ marginTop: 18 }}
-        title={<span>{scope === 'states' ? 'States' : (allLgas ? 'All LGAs' : selState + ' LGAs')} — click any to see its calculation
-          <InfoTip text="Each card shows an area’s zone before → after your levers, and its burden number. Click one to load its full maths above." /></span>}
-        sub={`Baseline zone → scenario zone · ${curMonth.label}${allLgas && cards.length > cardCap ? ` · showing top ${cardCap} of ${cards.length}` : ''}`}
-        right={<div style={{ display: 'inline-flex', background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 8, padding: 3 }}>
-          {[['zone', 'By burden'], ['change', 'By change']].map(([k, lbl]) => (
-            <button key={k} onClick={() => setCardSort(k)} style={{ border: 'none', cursor: 'pointer', padding: '5px 12px', borderRadius: 6, fontSize: '.76rem', fontWeight: 600, fontFamily: 'var(--font)',
-              background: cardSort === k ? 'var(--bg-1)' : 'transparent', color: cardSort === k ? 'var(--accent)' : 'var(--txt-2)' }}>{lbl}</button>))}
-        </div>}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 10, maxHeight: 420, overflowY: 'auto', paddingRight: 4 }}>
-          {cards.slice(0, cardCap).map(c => (
-            <div key={c.key} onClick={() => setSelKey(c.key)} style={{ cursor: 'pointer',
-              border: selKey === c.key ? `2px solid ${ZONES[c.scen.zone].c}` : '1px solid var(--border)', borderRadius: 10, padding: '11px 13px',
-              borderLeft: `4px solid ${ZONES[c.scen.zone].c}`, background: 'var(--bg-1)' }}>
-              <div style={{ fontWeight: 700, fontSize: '.84rem', color: '#0f2230', marginBottom: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <ZoneChip zone={c.base.zone} /><span style={{ color: '#94a8b6' }}>→</span><ZoneChip zone={c.scen.zone} />
-              </div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#3c5366', marginTop: 8 }}>
-                burden {c.base.display.toFixed(1)} → <b style={{ color: ZONES[c.scen.zone].t }}>{c.scen.display.toFixed(1)}</b>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+      {/* "Plan Budget" (small, scenario-priced budget section) is embedded
+          directly under the case-trend graph above -- Budget Planning no
+          longer has its own top-level nav tab or a separate SARIMAX run. The
+          Mechanistic (Ross-Macdonald) factors remain here as levers in the
+          SAME "Intervention levers" panel above. */}
     </>
   )
 }

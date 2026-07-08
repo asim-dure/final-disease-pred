@@ -411,7 +411,7 @@ export default function ModelLab({ data, variant = 'after' }) {
                 <span><i style={{ background: COLORS.amber }} />Projected to 2030 %</span>
               </div>
               {hotComment && (
-                <div style={{ marginTop: 12, padding: '12px 16px', background: '#f1f6f9', borderRadius: 10, borderLeft: `3px solid ${COLORS.accent}` }}>
+                <div style={{ marginTop: 12, padding: '12px 16px', background: 'var(--bg-2)', borderRadius: 10, borderLeft: `3px solid ${COLORS.accent}` }}>
                   <b style={{ color: 'var(--txt-0)' }}>Reading the 2030 projection.</b>{' '}
                   <span className="muted" style={{ fontSize: '.85rem' }}>
                     For {hotState === 'National' ? 'Nigeria' : hotState}, the hotspot share sits at
@@ -495,7 +495,7 @@ export default function ModelLab({ data, variant = 'after' }) {
                                   RF {(f.imp_rf * 100).toFixed(1)}<br />XGB {(f.imp_xgb * 100).toFixed(1)}<br />LGBM {(f.imp_lgbm * 100).toFixed(1)}
                                 </div>)}
                             </td>
-                            <td style={{ verticalAlign: 'top' }}><span className="badge-soft" style={{ background: f.selected ? '#e6f7f4' : '#eef2f6', color: f.selected ? '#0d9488' : '#64798a' }}>{f.selected ? '✓ Used' : f.base ? 'base' : 'dropped'}</span></td>
+                            <td style={{ verticalAlign: 'top' }}><span className="badge-soft" style={{ background: f.selected ? 'rgba(13,148,136,.14)' : 'var(--bg-3)', color: f.selected ? COLORS.accent : 'var(--txt-2)' }}>{f.selected ? '✓ Used' : f.base ? 'base' : 'dropped'}</span></td>
                           </tr>
                         )
                       })}

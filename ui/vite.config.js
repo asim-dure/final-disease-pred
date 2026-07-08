@@ -8,7 +8,7 @@ export default defineConfig({
     open: false,
     hmr: false,
     proxy: {
-      '/api': { target: 'http://localhost:8001', changeOrigin: true },
+      '/ews/api': { target: 'http://localhost:8548', changeOrigin: true },
     },
   },
 })

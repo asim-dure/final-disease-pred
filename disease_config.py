@@ -11,7 +11,7 @@ ODC 3.0's source. Notable corrections vs. ODC 3.0's hotspot.py CONFIG:
 """
 
 # malaria stays on the existing file-based pipeline; this entry exists only
-# so /api/diseases can return one consistent list including malaria.
+# so /ews/api/diseases can return one consistent list including malaria.
 MALARIA = {
     "label": "Malaria", "group": "malaria", "source": "file",
     "forecastable": True, "tb_style_excluded": False,
@@ -79,7 +79,7 @@ DISEASES = {
         "elasticity": {"art": -0.30, "linkage": -0.20, "pmtct_testing": -0.15},
         "burden_tier": "volume_trend",
         "dataset_info": {
-            "source": "hiv.fact_indicator_data (warehouse, NDARS system_id=7) + hiv_hotspot_predictions",
+            "source": "public.fact_indicator_data_hiv (warehouse, NDARS system_id=7) + hiv_hotspot_predictions",
             "coverage": "2014-2026 (forecast series); hotspot table has 83 distinct reported months",
             "granularity": "69,881 fact rows across 4,343 distinct geo locations",
             "notes": "Forecast target is the sum of the two Total-by-sex HTS_TST_POS columns only -- the ~100 disaggregated age/venue/sex-breakdown variants are deliberately never summed in, to avoid double-counting.",
@@ -107,7 +107,7 @@ DISEASES = {
         "burden_tier": "volume_trend",
         "case_partition": "sex",  # sum Male+Female only -- see TB_CASE_PARTITION below
         "dataset_info": {
-            "source": "tb_hotspot_predictions (warehouse) + tb.fact_indicator_data",
+            "source": "tb_hotspot_predictions (warehouse) + public.fact_indicator_data_tb",
             "coverage": "Only 2 real annual data points nationally",
             "granularity": "LGA-level hotspot snapshot, annual case counts",
             "notes": "Insufficient history for any statistical forecast (SARIMAX needs a meaningful run of consistent monthly data) -- Forecast, What-If and Simulator tabs are intentionally absent for TB, not broken.",
@@ -141,7 +141,7 @@ DISEASES = {
         "burden_tier": "volume_trend",
         "national_only_indicators": ["txcov"],
         "dataset_info": {
-            "source": "hypertension_hotspot_predictions + ncd.fact_indicator_data (warehouse)",
+            "source": "hypertension_hotspot_predictions + public.fact_indicator_data_ncd (warehouse)",
             "coverage": "2016-2026 (monthly)",
             "granularity": "829,379 fact rows across 32,086 distinct geo locations",
             "notes": "Treatment-coverage ('txcov') is reported NATIONALLY ONLY (4 rows total) -- it is shown as a national KPI only, never broadcast down to LGA rows as a fabricated per-LGA figure. No per-LGA driver/intervention dataset exists, so the burden score uses volume+trend only, not the full driver-weighted tier.",
@@ -178,7 +178,7 @@ DISEASES = {
         "burden_tier": "volume_trend",
         "national_only_indicators": ["txcov"],
         "dataset_info": {
-            "source": "diabetes_hotspot_predictions + ncd.fact_indicator_data (warehouse)",
+            "source": "diabetes_hotspot_predictions + public.fact_indicator_data_ncd (warehouse)",
             "coverage": "2016-2026 (monthly)",
             "granularity": "279,393 fact rows across 21,127 distinct geo locations",
             "notes": "Same national-only treatment-coverage limitation as hypertension: 'txcov' is shown as a national KPI only, never broadcast to LGA rows. No per-LGA driver dataset exists.",
@@ -207,7 +207,7 @@ DISEASES = {
         "interventions": [], "elasticity": {},
         "burden_tier": "volume_trend",
         "dataset_info": {
-            "source": "cervical_cancer_hotspot + ncd.fact_indicator_data (warehouse)",
+            "source": "cervical_cancer_hotspot + public.fact_indicator_data_ncd (warehouse)",
             "coverage": "2020-2026 (monthly)",
             "granularity": "4,424 fact rows across 1,903 distinct geo locations",
             "notes": "No per-LGA screening/vaccination driver data exists in the warehouse, so this disease has no intervention levers or unit-cost budget table -- only case volume + trend.",
@@ -238,7 +238,7 @@ DISEASES = {
         "interventions": [], "elasticity": {},
         "burden_tier": "volume_trend",
         "dataset_info": {
-            "source": "sickle_cell_hotspots + ncd.fact_indicator_data (warehouse, disease_name='Sickle Cell')",
+            "source": "sickle_cell_hotspots + public.fact_indicator_data_ncd (warehouse, disease_name='Sickle Cell')",
             "coverage": "Reported under the ncd schema, not ntd, despite the NTD tab grouping (verified live: 0 rows under ntd, 117,552 rows under ncd for Sickle Cell)",
             "granularity": "117,552 fact rows",
             "notes": "No risk score in the source hotspot table (has_score=False) -- areas are ranked by case volume, labelled 'Case Volume Rank' rather than implying a modelled risk score.",
@@ -267,7 +267,7 @@ DISEASES = {
         "interventions": [], "elasticity": {},
         "burden_tier": "volume_trend",
         "dataset_info": {
-            "source": "asthma_hotspot_predictions + ncd.fact_indicator_data (warehouse)",
+            "source": "asthma_hotspot_predictions + public.fact_indicator_data_ncd (warehouse)",
             "coverage": "2016-2026 (monthly)",
             "granularity": "200,097 fact rows across 20,864 distinct geo locations",
             "notes": "No risk score in the source hotspot table (has_score=False) -- ranked by admission volume instead.",
@@ -296,7 +296,7 @@ DISEASES = {
         "interventions": [], "elasticity": {},
         "burden_tier": "volume_trend",
         "dataset_info": {
-            "source": "yaws_predictive_hotspot + ntd.fact_indicator_data (warehouse)",
+            "source": "yaws_predictive_hotspot + public.fact_indicator_data_ntd (warehouse)",
             "coverage": "2020-2026 (monthly)",
             "granularity": "558 fact rows across 403 distinct geo locations -- the smallest dataset of the 9",
             "notes": "Most LGAs have too few reported months for SARIMAX (only 2 of 768 LGAs had enough history for a per-LGA forecast in the latest export run), so the national/state forecast is far more reliable than any single LGA trend shown on the map.",
@@ -325,7 +325,7 @@ DISEASES = {
         "interventions": [], "elasticity": {},
         "burden_tier": "volume_trend",
         "dataset_info": {
-            "source": "elephantiasis_hotspot_predictions + ntd.fact_indicator_data (warehouse)",
+            "source": "elephantiasis_hotspot_predictions + public.fact_indicator_data_ntd (warehouse)",
             "coverage": "Hotspot table: year-only, no month column. Forecast series (fact table): 2020-2026 monthly",
             "granularity": "1,456 fact rows across 854 distinct geo locations",
             "notes": "The hotspot map can only show an annual trend (no monthly slider) because the source hotspot table has no month column -- the national/state Forecast tab is monthly because it's built from the separate fact_indicator_data table, not the hotspot table. Only 13 of 768 LGAs had enough history for a per-LGA forecast.",
@@ -411,7 +411,7 @@ def supports_state_zone(disease_id: str) -> bool:
 
 
 def public_disease_list() -> list[dict]:
-    """Shape returned by GET /api/diseases -- only what the frontend needs."""
+    """Shape returned by GET /ews/api/diseases -- only what the frontend needs."""
     out = []
     for did, cfg in DISEASES.items():
         caps = dict(cfg["capabilities"])

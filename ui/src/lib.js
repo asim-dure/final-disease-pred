@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 
 const BASE = import.meta.env.BASE_URL || '/'
 
+// This app is deployed as a subfolder embedded (iframe) inside a shell
+// called "ews" -- every backend route lives at /ews/api/... there, not the
+// bare /api/... this repo used standalone. Override via VITE_API_BASE for
+// any other deployment target.
+export const API_BASE = import.meta.env.VITE_API_BASE || '/ews/api'
+
 // variant-aware fetch: data lives under data/<before|after>/, except for
 // non-malaria diseases, which live under data/<variant>/<disease>/ (a sibling
 // convention, per the multi-disease plan — malaria's own unprefixed files are
@@ -88,12 +94,14 @@ export function zone(incidence) {
 
 // Non-malaria diseases display precomputed 0-100 burden-score zones (thresholds
 // match etl_warehouse_common.zone_for_score) instead of malaria's incidence bands.
+// Raised bar so not every area reads as a hotspot -- see facility_api.py's
+// _ZONE_THRESHOLDS for the full rationale.
 export function burdenZone(score) {
   if (score == null || isNaN(score)) return { name: 'Not a Hotspot', color: '#64748b' }
-  if (score < 18) return { name: 'Not a Hotspot', color: '#64748b' }
-  if (score < 38) return { name: 'Green', color: '#16a34a' }
-  if (score < 58) return { name: 'Yellow', color: '#ca8a04' }
-  if (score < 78) return { name: 'Amber', color: '#ea580c' }
+  if (score < 60) return { name: 'Not a Hotspot', color: '#64748b' }
+  if (score < 71) return { name: 'Green', color: '#16a34a' }
+  if (score < 81) return { name: 'Yellow', color: '#ca8a04' }
+  if (score < 91) return { name: 'Amber', color: '#ea580c' }
   return { name: 'Red', color: '#dc2626' }
 }
 

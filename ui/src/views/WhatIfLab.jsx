@@ -4,11 +4,14 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
 } from 'recharts'
 import { Card, MarkdownLite } from '../components'
-import { fmt, fmtFull, monthLabel, COLORS } from '../lib'
+import { fmt, fmtFull, monthLabel, COLORS, API_BASE } from '../lib'
 
 // ── API helpers ──────────────────────────────────────────────────────────────
+// Callers still pass the familiar '/api/...' path -- rewritten to this app's
+// real deployed base (/ews/api/... when embedded) in one place here, so none
+// of the many api('/api/...', ...) call sites below needed to change.
 const api = (path, body) =>
-  fetch(path, {
+  fetch(path.replace(/^\/api/, API_BASE), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -21,9 +24,9 @@ const api = (path, body) =>
 const ChartTT = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
-    <div style={{ background: '#fff', border: '1px solid #d7e1e8', borderRadius: 10,
+    <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10,
       padding: '10px 13px', fontSize: '.8rem', boxShadow: '0 8px 30px rgba(15,34,48,.12)' }}>
-      <div style={{ fontWeight: 700, color: '#0f2230', marginBottom: 5 }}>{monthLabel(label)}</div>
+      <div style={{ fontWeight: 700, color: 'var(--txt-0)', marginBottom: 5 }}>{monthLabel(label)}</div>
       {payload.map((p, i) => (
         <div key={i} style={{ color: p.color, display: 'flex', justifyContent: 'space-between', gap: 14 }}>
           <span>{p.name}</span>
@@ -34,7 +37,7 @@ const ChartTT = ({ active, payload, label }) => {
   )
 }
 
-const axPr = { tick: { fill: '#64798a', fontSize: 11 }, tickLine: false, axisLine: { stroke: 'rgba(13,148,136,.12)' } }
+const axPr = { tick: { fill: 'var(--txt-2)', fontSize: 11 }, tickLine: false, axisLine: { stroke: 'rgba(13,148,136,.12)' } }
 
 // ── searchable multi-select ───────────────────────────────────────────────────
 function FeaturePicker({ label, all, selected, onToggle, locked = false, color = COLORS.accent }) {
@@ -43,8 +46,8 @@ function FeaturePicker({ label, all, selected, onToggle, locked = false, color =
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: '.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#64798a' }}>{label}</span>
-        <span style={{ fontSize: '.68rem', color: '#94a8b6' }}>{selected.length} selected</span>
+        <span style={{ fontSize: '.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--txt-2)' }}>{label}</span>
+        <span style={{ fontSize: '.68rem', color: 'var(--txt-3)' }}>{selected.length} selected</span>
       </div>
       {!locked && (
         <input
@@ -53,8 +56,8 @@ function FeaturePicker({ label, all, selected, onToggle, locked = false, color =
         />
       )}
       <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8,
-        background: '#f8fbfd', padding: '6px 4px' }}>
-        {filtered.length === 0 && <div style={{ padding: '8px 10px', color: '#94a8b6', fontSize: '.78rem' }}>No features match</div>}
+        background: 'var(--bg-2)', padding: '6px 4px' }}>
+        {filtered.length === 0 && <div style={{ padding: '8px 10px', color: 'var(--txt-3)', fontSize: '.78rem' }}>No features match</div>}
         {filtered.map(col => {
           const on = selected.includes(col)
           return (
@@ -63,7 +66,7 @@ function FeaturePicker({ label, all, selected, onToggle, locked = false, color =
                 background: on ? `${color}14` : 'transparent', cursor: locked ? 'default' : 'pointer',
                 padding: '5px 10px', borderRadius: 6, textAlign: 'left', marginBottom: 1,
                 borderLeft: on ? `3px solid ${color}` : '3px solid transparent', transition: '.12s' }}>
-              <span style={{ flex: 1, fontSize: '.78rem', color: on ? '#0f2230' : '#3c5366',
+              <span style={{ flex: 1, fontSize: '.78rem', color: on ? 'var(--txt-0)' : 'var(--txt-1)',
                 fontWeight: on ? 600 : 400, lineHeight: 1.3 }}>{col}</span>
               {locked && on && <span style={{ fontSize: '.65rem', color, fontWeight: 700, flexShrink: 0 }}>LOCKED</span>}
               {!locked && on && <span style={{ fontSize: '.7rem', color, fontWeight: 700 }}>✓</span>}
@@ -96,9 +99,9 @@ function InterventionCard({ col, pct, onChange, onRemove }) {
   return (
     <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border-2)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-        <span style={{ fontSize: '.82rem', fontWeight: 600, color: '#0f2230', flex: 1, lineHeight: 1.3 }} title={col}>{short}</span>
+        <span style={{ fontSize: '.82rem', fontWeight: 600, color: 'var(--txt-0)', flex: 1, lineHeight: 1.3 }} title={col}>{short}</span>
         <button onClick={onRemove} style={{ border: 'none', background: 'none', cursor: 'pointer',
-          color: '#94a8b6', fontSize: '.9rem', padding: '0 0 0 8px', flexShrink: 0 }}>×</button>
+          color: 'var(--txt-3)', fontSize: '.9rem', padding: '0 0 0 8px', flexShrink: 0 }}>×</button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <input type="range" min={-80} max={200} value={pct} step={5}
@@ -109,7 +112,7 @@ function InterventionCard({ col, pct, onChange, onRemove }) {
           {pct >= 0 ? '+' : ''}{pct}%
         </span>
       </div>
-      <div style={{ fontSize: '.68rem', color: '#94a8b6', marginTop: 3 }}>
+      <div style={{ fontSize: '.68rem', color: 'var(--txt-3)', marginTop: 3 }}>
         {pct > 0 ? `Scale up by ${pct}% relative to current baseline` : pct < 0 ? `Scale down by ${Math.abs(pct)}%` : 'No change from baseline'}
       </div>
     </div>
@@ -123,7 +126,7 @@ function KTile({ label, value, sub, color = COLORS.accent }) {
       <div className="accent-bar" style={{ background: color }} />
       <div className="label">{label}</div>
       <div className="value" style={{ color, fontSize: '1.6rem' }}>{value}</div>
-      {sub && <div style={{ fontSize: '.72rem', color: '#64798a', marginTop: 4 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: '.72rem', color: 'var(--txt-2)', marginTop: 4 }}>{sub}</div>}
     </div>
   )
 }
@@ -173,12 +176,12 @@ export default function WhatIfLab({ disease = 'malaria' }) {
   const [aiComparing, setAiComparing] = useState(false)
   const [aiCompareErr, setAiCompareErr] = useState(null)
 
-  const loadProposals = () => fetch(`/api/proposals?disease=${encodeURIComponent(disease)}`).then(r => r.json()).then(setProposals).catch(() => {})
+  const loadProposals = () => fetch(`${API_BASE}/proposals?disease=${encodeURIComponent(disease)}`).then(r => r.json()).then(setProposals).catch(() => {})
 
   // load meta + proposals on mount (re-fetch meta when the selected disease changes)
   useEffect(() => {
     setMeta(null); setMetaErr(null)
-    fetch(`/api/meta?disease=${encodeURIComponent(disease)}`).then(r => r.json()).then(setMeta).catch(e => setMetaErr(String(e)))
+    fetch(`${API_BASE}/meta?disease=${encodeURIComponent(disease)}`).then(r => r.json()).then(setMeta).catch(e => setMetaErr(String(e)))
     loadProposals()
   }, [disease])
 
@@ -191,7 +194,15 @@ export default function WhatIfLab({ disease = 'malaria' }) {
     setResult(null)
   }, [meta])
 
-  const toggleCov = col => setCovariates(s => s.includes(col) ? s.filter(x => x !== col) : [...s, col])
+  // Removing a covariate that's currently an active intervention lever drops
+  // that lever too -- interventions are only ever a SUBSET of the chosen
+  // covariates (see intCandidates below), so a lever can't outlive the
+  // covariate selection that made it available.
+  const toggleCov = col => setCovariates(s => {
+    const next = s.includes(col) ? s.filter(x => x !== col) : [...s, col]
+    if (!next.includes(col)) setInterventions(iv => { if (!(col in iv)) return iv; const n = { ...iv }; delete n[col]; return n })
+    return next
+  })
   const toggleInt = col => setInterventions(s => col in s ? (() => { const n = { ...s }; delete n[col]; return n })() : { ...s, [col]: 10 })
   const setIntPct = (col, pct) => setInterventions(s => ({ ...s, [col]: pct }))
   const removeInt = col => setInterventions(s => { const n = { ...s }; delete n[col]; return n })
@@ -294,7 +305,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
   }
 
   const deleteProposal = async (id) => {
-    await fetch(`/api/proposals/${id}`, { method: 'DELETE' })
+    await fetch(`${API_BASE}/proposals/${id}`, { method: 'DELETE' })
     setCompareIds(s => s.filter(x => x !== id))
     if (viewProposal?.id === id) setViewProposal(null)
     loadProposals()
@@ -345,7 +356,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
     <div className="loading" style={{ color: COLORS.coral, flexDirection: 'column', gap: 8 }}>
       <b>Could not connect to the forecast API.</b>
       <span style={{ fontSize: '.82rem' }}>Start the backend: <code>python api.py</code> in the project root.</span>
-      <span style={{ fontSize: '.75rem', color: '#94a8b6' }}>{metaErr}</span>
+      <span style={{ fontSize: '.75rem', color: 'var(--txt-3)' }}>{metaErr}</span>
     </div>
   )
 
@@ -354,7 +365,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
   return (
     <>
       <div className="view-head">
-        <h2>What-If Lab</h2>
+        <h2>Budget Planning</h2>
         <p>
           Run SARIMAX forecasts at national or state level using any combination of covariates.
           In What-If mode, scale intervention levers to see how malaria cases respond — then generate
@@ -371,7 +382,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
               fontFamily: 'var(--font)', fontSize: '.9rem', fontWeight: 700, transition: '.15s',
               background: mode === m ? 'var(--bg-1)' : 'transparent',
               color: mode === m ? 'var(--accent)' : 'var(--txt-2)',
-              boxShadow: mode === m ? '0 1px 6px rgba(15,34,48,.08)' : 'none' }}>
+              boxShadow: mode === m ? '0 1px 6px rgba(0,0,0,.2)' : 'none' }}>
             {lbl}
           </button>
         ))}
@@ -415,7 +426,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
       </div>
 
       {runErr && (
-        <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 10,
+        <div style={{ background: 'rgba(251,113,133,.1)', border: '1px solid rgba(251,113,133,.35)', borderRadius: 10,
           padding: '12px 16px', color: COLORS.coral, fontSize: '.84rem', marginBottom: 16 }}>
           <b>Error:</b> {runErr}
         </div>
@@ -437,41 +448,58 @@ export default function WhatIfLab({ disease = 'malaria' }) {
           </Card>
 
           {/* what-if intervention panel */}
-          {mode === 'whatif' && (
+          {mode === 'whatif' && (() => {
+            // Only covariates the user actually picked above (as SARIMAX
+            // dependencies) that are ALSO programmatic/actionable are offered
+            // as intervention levers -- pick the factors that matter first,
+            // then adjust weights only for those, so the lever list can never
+            // drift out of sync with what the model is actually conditioned on.
+            const intCandidates = covariates.filter(c => meta.intervention_cols.includes(c))
+            return (
             <Card title="Intervention Levers"
-              sub="Baseline (environmental/demographic) features are locked. Only programmatic features can be scaled.">
+              sub="Only covariates selected above (left) that are programmatic/actionable show up here.">
 
               {/* locked baseline notice */}
-              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8,
-                padding: '9px 12px', fontSize: '.75rem', color: '#16a34a', marginBottom: 12 }}>
+              <div style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.35)', borderRadius: 8,
+                padding: '9px 12px', fontSize: '.75rem', color: 'var(--green)', marginBottom: 12 }}>
                 🔒 Baseline parameters (climate, geography, poverty, NDVI, ENSO) are locked —
                 only health-system supply features can be intervened on.
               </div>
 
-              {/* add intervention button */}
-              <button onClick={() => setIntPickerOpen(p => !p)}
-                style={{ width: '100%', padding: '8px 12px', background: `${COLORS.accent}12`,
-                  border: `1px dashed ${COLORS.accent}60`, borderRadius: 8, cursor: 'pointer',
-                  color: COLORS.accent, fontWeight: 700, fontSize: '.84rem', marginBottom: 10 }}>
-                {intPickerOpen ? '▲ Close picker' : '＋ Add intervention'}
-              </button>
-
-              {intPickerOpen && (
-                <div style={{ marginBottom: 12 }}>
-                  <FeaturePicker
-                    label="Actionable features"
-                    all={meta.intervention_cols}
-                    selected={Object.keys(interventions)}
-                    onToggle={toggleInt}
-                    color={COLORS.accent}
-                  />
+              {intCandidates.length === 0 ? (
+                <div style={{ color: 'var(--txt-3)', fontSize: '.78rem', textAlign: 'center', padding: '12px 0', lineHeight: 1.6 }}>
+                  No actionable covariates selected yet. Add one or more programmatic features
+                  (e.g. ACT, LLIN, RDT, IPTp) in the <b>Covariates</b> picker above first — they'll
+                  appear here to turn into intervention levers.
                 </div>
-              )}
+              ) : (
+                <>
+                  {/* add intervention button */}
+                  <button onClick={() => setIntPickerOpen(p => !p)}
+                    style={{ width: '100%', padding: '8px 12px', background: `${COLORS.accent}12`,
+                      border: `1px dashed ${COLORS.accent}60`, borderRadius: 8, cursor: 'pointer',
+                      color: COLORS.accent, fontWeight: 700, fontSize: '.84rem', marginBottom: 10 }}>
+                    {intPickerOpen ? '▲ Close picker' : '＋ Add intervention'}
+                  </button>
 
-              {Object.keys(interventions).length === 0 && !intPickerOpen && (
-                <div style={{ color: '#94a8b6', fontSize: '.78rem', textAlign: 'center', padding: '12px 0' }}>
-                  No interventions added yet. Click above to add.
-                </div>
+                  {intPickerOpen && (
+                    <div style={{ marginBottom: 12 }}>
+                      <FeaturePicker
+                        label="Actionable features (from your selected covariates)"
+                        all={intCandidates}
+                        selected={Object.keys(interventions)}
+                        onToggle={toggleInt}
+                        color={COLORS.accent}
+                      />
+                    </div>
+                  )}
+
+                  {Object.keys(interventions).length === 0 && !intPickerOpen && (
+                    <div style={{ color: 'var(--txt-3)', fontSize: '.78rem', textAlign: 'center', padding: '12px 0' }}>
+                      No interventions added yet. Click above to add.
+                    </div>
+                  )}
+                </>
               )}
 
               {Object.entries(interventions).map(([col, pct]) => (
@@ -480,7 +508,8 @@ export default function WhatIfLab({ disease = 'malaria' }) {
                   onRemove={() => removeInt(col)} />
               ))}
             </Card>
-          )}
+            )
+          })()}
         </div>
 
         {/* ── right panel ── */}
@@ -489,7 +518,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
           {/* empty state */}
           {!result && !running && (
             <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 16,
-              padding: '48px 32px', textAlign: 'center', color: '#94a8b6' }}>
+              padding: '48px 32px', textAlign: 'center', color: 'var(--txt-3)' }}>
               <div style={{ fontSize: '2.4rem', marginBottom: 12 }}>📈</div>
               <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--txt-1)', marginBottom: 6 }}>
                 Configure and run a forecast
@@ -505,10 +534,10 @@ export default function WhatIfLab({ disease = 'malaria' }) {
           {/* loading skeleton */}
           {running && (
             <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 16,
-              padding: '60px 32px', textAlign: 'center', color: '#64798a' }}>
+              padding: '60px 32px', textAlign: 'center', color: 'var(--txt-2)' }}>
               <div className="spinner" style={{ margin: '0 auto 14px', width: 28, height: 28, borderWidth: 3 }} />
               <div style={{ fontWeight: 600 }}>Fitting SARIMAX model…</div>
-              <div style={{ fontSize: '.78rem', marginTop: 6, color: '#94a8b6' }}>This may take 5–15 seconds depending on data size.</div>
+              <div style={{ fontSize: '.78rem', marginTop: 6, color: 'var(--txt-3)' }}>This may take 5–15 seconds depending on data size.</div>
             </div>
           )}
 
@@ -537,7 +566,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
                 sub={`Target: ${target} · Horizon: ${horizon} months${covariates.length ? ` · ${covariates.length} covariate${covariates.length > 1 ? 's' : ''}` : ' · univariate'}`}>
                 <ResponsiveContainer width="100%" height={320}>
                   <LineChart data={chartData} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-                    <CartesianGrid stroke="rgba(15,34,48,.06)" vertical={false} />
+                    <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
                     <XAxis dataKey="date" {...axPr} tickFormatter={monthLabel} minTickGap={36} />
                     <YAxis {...axPr} tickFormatter={fmt} width={52} />
                     <Tooltip content={<ChartTT />} />
@@ -545,7 +574,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
                       <ReferenceLine x={splitDate} stroke="rgba(217,119,6,.5)" strokeDasharray="4 4"
                         label={{ value: 'Forecast →', fill: COLORS.amber, fontSize: 11, position: 'insideTopRight' }} />
                     )}
-                    <Legend wrapperStyle={{ fontSize: '.78rem', color: '#3c5366' }} />
+                    <Legend wrapperStyle={{ fontSize: '.78rem', color: 'var(--txt-1)' }} />
                     <Line type="monotone" dataKey="Historical" name="Historical" stroke={COLORS.accent}
                       strokeWidth={2.4} dot={false} connectNulls />
                     {result.forecast && (
@@ -564,7 +593,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
                   </LineChart>
                 </ResponsiveContainer>
                 <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '.72rem', color: '#64798a' }}>
+                  <span style={{ fontSize: '.72rem', color: 'var(--txt-2)' }}>
                     Solid teal = historical. Dashed = baseline SARIMAX projection.
                     {mode === 'whatif' ? ' Solid coloured = What-If scenario.' : ''}
                   </span>
@@ -592,8 +621,8 @@ export default function WhatIfLab({ disease = 'malaria' }) {
                               <td>{monthLabel(r.date)}</td>
                               {result.forecast && <>
                                 <td className="num">{fmtFull(r.cases)}</td>
-                                <td className="num" style={{ color: '#64798a' }}>{fmtFull(r.lower)}</td>
-                                <td className="num" style={{ color: '#64798a' }}>{fmtFull(r.upper)}</td>
+                                <td className="num" style={{ color: 'var(--txt-2)' }}>{fmtFull(r.lower)}</td>
+                                <td className="num" style={{ color: 'var(--txt-2)' }}>{fmtFull(r.upper)}</td>
                               </>}
                               {result.base && <>
                                 <td className="num">{fmtFull(r.cases)}</td>
@@ -635,18 +664,18 @@ export default function WhatIfLab({ disease = 'malaria' }) {
           {budgetMode === 'forward' && (
             <div style={{ marginBottom: 12 }}>
               {!result ? (
-                <div style={{ color: '#64798a', fontSize: '.84rem', background: '#f8fbfd', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+                <div style={{ color: 'var(--txt-2)', fontSize: '.84rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
                   Run a forecast above first, then generate a budget &amp; prevention plan from it.
                 </div>
               ) : disease === 'malaria' && (mode !== 'whatif' || Object.keys(interventions).length === 0) ? (
-                <div style={{ color: '#64798a', fontSize: '.84rem', background: '#f8fbfd', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+                <div style={{ color: 'var(--txt-2)', fontSize: '.84rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
                   Run a <b>What-If</b> forecast with at least one intervention above, then generate a full
                   month-by-month budget for all {horizon} forecast months (units, ₦/USD cost, cumulative spend, cases averted).
                 </div>
               ) : (
                 <>
                   {disease !== 'malaria' && (
-                    <div style={{ fontSize: '.74rem', color: '#94a8b6', marginBottom: 8 }}>
+                    <div style={{ fontSize: '.74rem', color: 'var(--txt-3)', marginBottom: 8 }}>
                       {Object.keys(interventions).length > 0
                         ? 'No ₦ unit-cost table exists for this disease yet — the report below will be disease-specific but cost figures are literature-based estimates, clearly labeled.'
                         : 'No driver/intervention dataset exists for this disease — the report below will be a generic, clearly-labeled budget + prevention framework, not fabricated as disease-specific.'}
@@ -665,14 +694,14 @@ export default function WhatIfLab({ disease = 'malaria' }) {
           {/* REVERSE — requires a real grounded unit-cost table; malaria only today */}
           {budgetMode === 'reverse' && (
             disease !== 'malaria' ? (
-              <div style={{ color: '#64798a', fontSize: '.84rem', background: '#f8fbfd', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ color: 'var(--txt-2)', fontSize: '.84rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
                 Budget → Interventions optimisation requires a grounded ₦ unit-cost table to allocate spend against,
                 which is not yet configured for this disease. Only malaria has one today. Use "Interventions → Budget"
                 above for a generic/indicative report instead.
               </div>
             ) : (
             <div style={{ marginBottom: 12 }}>
-              <p style={{ color: '#64798a', fontSize: '.84rem', marginBottom: 10, lineHeight: 1.55 }}>
+              <p style={{ color: 'var(--txt-2)', fontSize: '.84rem', marginBottom: 10, lineHeight: 1.55 }}>
                 Enter a total budget — the AI picks the best intervention mix within it, then we run SARIMAX to project the actual impact.
               </p>
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -681,7 +710,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
                   <input type="text" value={budgetNgn.toLocaleString()} onChange={e => setBudgetNgn(Math.max(0, +e.target.value.replace(/[^0-9]/g, '') || 0))}
                     style={{ minWidth: 200, fontFamily: 'var(--mono)' }} />
                 </div>
-                <div style={{ fontSize: '.82rem', color: '#64798a', paddingBottom: 9 }}>= <b>{fmtUsd(budgetNgn)}</b> <span className="muted">(at ₦{USD_NGN.toLocaleString()}/$)</span></div>
+                <div style={{ fontSize: '.82rem', color: 'var(--txt-2)', paddingBottom: 9 }}>= <b>{fmtUsd(budgetNgn)}</b> <span className="muted">(at ₦{USD_NGN.toLocaleString()}/$)</span></div>
                 <button onClick={optimizeBudget} disabled={budgeting || (level === 'state' && !stateName)}
                   style={{ padding: '9px 20px', background: COLORS.accent, color: '#fff', border: 'none', borderRadius: 10,
                     cursor: budgeting ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '.86rem', fontFamily: 'var(--font)', opacity: budgeting ? .6 : 1 }}>
@@ -698,15 +727,15 @@ export default function WhatIfLab({ disease = 'malaria' }) {
           )}
 
           {budgeting && (
-            <div style={{ textAlign: 'center', padding: '20px 0', color: '#64798a' }}>
+            <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--txt-2)' }}>
               <div className="spinner" style={{ margin: '0 auto 10px', borderTopColor: COLORS.violet }} />
               <div style={{ fontWeight: 600 }}>{budgetMode === 'reverse' ? 'AI optimizing interventions for your budget…' : 'Generating budget & prevention report…'}</div>
             </div>
           )}
           {budgetErr && (
-            <div style={{ color: COLORS.coral, fontSize: '.82rem', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ color: COLORS.coral, fontSize: '.82rem', background: 'rgba(251,113,133,.1)', border: '1px solid rgba(251,113,133,.35)', borderRadius: 8, padding: '10px 14px' }}>
               <b>Budget error:</b> {budgetErr}
-              <div style={{ marginTop: 6, color: '#94a8b6', fontSize: '.75rem' }}>Make sure GROQ_API_KEY is set in your .env file.</div>
+              <div style={{ marginTop: 6, color: 'var(--txt-3)', fontSize: '.75rem' }}>Make sure GROQ_API_KEY is set in your .env file.</div>
             </div>
           )}
 
@@ -714,7 +743,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 12px' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: '.72rem', color: '#94a8b6' }}>Generated by llama-3.1-8b-instant via Groq</span>
+                  <span style={{ fontSize: '.72rem', color: 'var(--txt-3)' }}>Generated by llama-3.1-8b-instant via Groq</span>
                   {budgetGeneric && (
                     <span style={{ fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: 'rgba(217,119,6,.14)', color: COLORS.amber }}>
                       GENERIC / INDICATIVE
@@ -728,7 +757,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
                   </button>
                 </div>
               </div>
-              <div style={{ background: '#f8fbfd', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px',
+              <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px',
                 maxHeight: 620, overflowY: 'auto' }}>
                 <MarkdownLite text={budgetPlan} />
               </div>
@@ -740,30 +769,30 @@ export default function WhatIfLab({ disease = 'malaria' }) {
         <Card className="col" style={{ flex: 1, minWidth: 280 }}
           title={`Saved Proposals (${proposals.length})`}
           sub="Each generation is versioned — view, compare or delete">
-          {proposals.length === 0 && <div style={{ color: '#94a8b6', fontSize: '.82rem', padding: '8px 0' }}>No proposals yet. Generate a plan and click <b>Save</b>.</div>}
+          {proposals.length === 0 && <div style={{ color: 'var(--txt-3)', fontSize: '.82rem', padding: '8px 0' }}>No proposals yet. Generate a plan and click <b>Save</b>.</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
             {[...proposals].sort((a, b) => b.version - a.version).map(p => {
               const inCmp = compareIds.includes(p.id)
               return (
                 <div key={p.id} style={{ border: `1px solid ${inCmp ? COLORS.accent : 'var(--border)'}`, borderRadius: 9, padding: '10px 12px', background: 'var(--bg-1)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <b style={{ fontSize: '.84rem', color: '#0f2230' }}>Proposal v{p.version}</b>
+                    <b style={{ fontSize: '.84rem', color: 'var(--txt-0)' }}>Proposal v{p.version}</b>
                     <span style={{ fontSize: '.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 12,
                       background: p.mode === 'reverse' ? 'rgba(13,148,136,.14)' : 'rgba(124,58,237,.14)',
                       color: p.mode === 'reverse' ? COLORS.accent : COLORS.violet }}>{p.mode === 'reverse' ? 'Budget→Plan' : 'Plan→Budget'}</span>
                   </div>
-                  <div style={{ fontSize: '.7rem', color: '#64798a', marginTop: 3 }}>
+                  <div style={{ fontSize: '.7rem', color: 'var(--txt-2)', marginTop: 3 }}>
                     {p.budget_ngn ? `Budget ${fmtNgn(p.budget_ngn)}` : `${Object.keys(p.interventions || {}).length} interventions`}
                     {p.summary?.averted != null && <> · averts <b style={{ color: COLORS.green }}>{fmt(p.summary.averted)}</b></>}
                   </div>
-                  <div style={{ fontSize: '.64rem', color: '#94a8b6', marginTop: 2 }}>{(p.created || '').replace('T', ' ').replace('+00:00', ' UTC')}</div>
+                  <div style={{ fontSize: '.64rem', color: 'var(--txt-3)', marginTop: 2 }}>{(p.created || '').replace('T', ' ').replace('+00:00', ' UTC')}</div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                     <button onClick={() => setViewProposal(p)} className="btn" style={{ padding: '4px 10px', fontSize: '.72rem' }}>View</button>
                     <button onClick={() => { setCompareIds(s => inCmp ? s.filter(x => x !== p.id) : [...s, p.id]); setAiCompare(null); setAiCompareErr(null) }} className="btn"
                       style={{ padding: '4px 10px', fontSize: '.72rem', borderColor: inCmp ? COLORS.accent : 'var(--border)', color: inCmp ? COLORS.accent : 'var(--txt-1)' }}>
                       {inCmp ? '✓ Compare' : 'Compare'}
                     </button>
-                    <button onClick={() => deleteProposal(p.id)} className="btn" style={{ padding: '4px 10px', fontSize: '.72rem', marginLeft: 'auto', color: COLORS.coral, borderColor: '#fecdd3' }}>✕</button>
+                    <button onClick={() => deleteProposal(p.id)} className="btn" style={{ padding: '4px 10px', fontSize: '.72rem', marginLeft: 'auto', color: COLORS.coral, borderColor: 'rgba(251,113,133,.4)' }}>✕</button>
                   </div>
                 </div>
               )
@@ -802,23 +831,23 @@ export default function WhatIfLab({ disease = 'malaria' }) {
                 cursor: aiComparing ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '.84rem', fontFamily: 'var(--font)', opacity: aiComparing ? .6 : 1 }}>
               🤖 {aiComparing ? 'Comparing…' : 'AI Compare'}
             </button>
-            <span style={{ fontSize: '.72rem', color: '#94a8b6', marginLeft: 10 }}>
+            <span style={{ fontSize: '.72rem', color: 'var(--txt-3)', marginLeft: 10 }}>
               What each forecast showed and what its budget was — only through {/* cap label */}May 2027.
             </span>
 
             {aiComparing && (
-              <div style={{ textAlign: 'center', padding: '16px 0', color: '#64798a' }}>
+              <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--txt-2)' }}>
                 <div className="spinner" style={{ margin: '0 auto 8px', borderTopColor: COLORS.violet }} />
                 AI is comparing the forecasts and budgets…
               </div>
             )}
             {aiCompareErr && (
-              <div style={{ color: COLORS.coral, fontSize: '.82rem', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 8, padding: '10px 14px', marginTop: 10 }}>
+              <div style={{ color: COLORS.coral, fontSize: '.82rem', background: 'rgba(251,113,133,.1)', border: '1px solid rgba(251,113,133,.35)', borderRadius: 8, padding: '10px 14px', marginTop: 10 }}>
                 <b>Compare error:</b> {aiCompareErr}
               </div>
             )}
             {aiCompare && !aiComparing && (
-              <div style={{ background: '#f8fbfd', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px', marginTop: 12, maxHeight: 520, overflowY: 'auto' }}>
+              <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px', marginTop: 12, maxHeight: 520, overflowY: 'auto' }}>
                 <MarkdownLite text={aiCompare} />
               </div>
             )}
@@ -831,7 +860,7 @@ export default function WhatIfLab({ disease = 'malaria' }) {
         <Card style={{ marginTop: 18 }} title={`Proposal v${viewProposal.version} · ${viewProposal.mode === 'reverse' ? 'Budget → Interventions' : 'Interventions → Budget'}`}
           sub={`${viewProposal.budget_ngn ? `Budget ${fmtNgn(viewProposal.budget_ngn)} (${fmtUsd(viewProposal.budget_ngn)}) · ` : ''}${(viewProposal.created || '').replace('T', ' ').replace('+00:00', ' UTC')}`}
           right={<button className="btn" onClick={() => setViewProposal(null)}>Close</button>}>
-          <div style={{ background: '#f8fbfd', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px',
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px',
             maxHeight: 560, overflowY: 'auto' }}>
             <MarkdownLite text={viewProposal.plan} />
           </div>

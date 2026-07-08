@@ -11,11 +11,18 @@ Design (leakage-free forecasting):
   - NO contemporaneous operational counts (RDT/ACT/total reported) -> those are
     co-determined with the target and unknown for future months.
   - Model             : XGBoost (non-linear), log-target.
-  - Validation        : train 2023-01..2025-12, recursively predict 2026 Q1
-                        (the only out-of-sample months with actuals).
-  - Forecast          : recursive monthly to 2028-12, feeding predictions back
-                        as lags; future weather = per-LGA monthly climatology.
+  - Validation        : train on everything up to 3 months before the last
+                        real reported month, recursively predict those last
+                        3 real months (the only genuine out-of-sample actuals).
+  - Forecast          : recursive monthly to (last real month + 12), feeding
+                        predictions back as lags; future weather = per-LGA
+                        monthly climatology.
   - Baseline          : seasonal-naive (same month prior year) for comparison.
+
+TRAIN_END / VAL_MONTHS / FC_END are auto-detected from the data's own extent
+(the last month with real, nonzero reported cases) rather than hardcoded, so
+the forecast horizon always tracks "one year past wherever the data actually
+ends" instead of silently going stale as new months of real data arrive.
 
 Outputs: forecast_lga.parquet/csv, forecast_state.csv, forecast_national.csv,
          model_metrics.json, feature_importance.csv, malaria_xgb.json
@@ -28,15 +35,30 @@ warnings.filterwarnings("ignore")
 
 TARGET = "MAL - Malaria cases confirmed (number)"
 WEATHER = ["rainfall_mm_day", "temperature_mean_c", "humidity_pct", "solar_kwh_m2_day"]
-TRAIN_END = 2025 * 12 + 11      # 2025-12
-VAL_MONTHS = [2026 * 12 + 0, 2026 * 12 + 1, 2026 * 12 + 2]  # 2026 Q1
-FC_END = 2028 * 12 + 11         # 2028-12
 
 # ---------------------------------------------------------------- load + panel
 df = pd.read_parquet("agg_lga_pop.parquet")
-df = df[df.year.between(2023, 2026)].copy()
+df = df[df.year >= 2023].copy()   # MAL confirmed-cases target has no meaningful signal before 2023
 df["ym"] = df.year * 12 + (df.month - 1)
 keys = ["state", "lga"]
+
+# auto-detect the last month with real reported data (the source panel carries
+# trailing placeholder rows with cases==0 for months not yet reported -- those
+# must NOT be mistaken for real, low-transmission months).
+_monthly_totals = df.groupby("ym")[TARGET].sum()
+LAST_REAL_YM = int(_monthly_totals[_monthly_totals > 0].index.max())
+VAL_MONTHS = [LAST_REAL_YM - 2, LAST_REAL_YM - 1, LAST_REAL_YM]   # last 3 real months = holdout
+TRAIN_END = VAL_MONTHS[0] - 1                                      # everything strictly before holdout
+FC_END = LAST_REAL_YM + 12                                         # one year past last real data
+
+
+def _ym_label(ym):
+    return f"{ym // 12}-{(ym % 12) + 1:02d}"
+
+
+print(f"Last real reported month: {_ym_label(LAST_REAL_YM)}  |  "
+      f"train through {_ym_label(TRAIN_END)}  |  validate {_ym_label(VAL_MONTHS[0])}..{_ym_label(VAL_MONTHS[-1])}  |  "
+      f"forecast to {_ym_label(FC_END)}")
 
 # facility share (for future population projection)
 _fac = df.groupby(keys)["n_facilities"].max().reset_index()
@@ -142,7 +164,8 @@ def metrics(actual, pred, label):
             "R2": round(float(r2), 4) if r2 is not None else None}
 
 
-# ============================ STEP 1: validation on 2026 Q1 ====================
+# ============================ STEP 1: validation on last 3 real months =========
+val_label = f"{_ym_label(VAL_MONTHS[0])}..{_ym_label(VAL_MONTHS[-1])}"
 feat = build_features(panel)
 train = feat[(feat.ym <= TRAIN_END) & feat["cases"].notna()].dropna(subset=["lag12"]).copy()
 val_model = fit_model(train)
@@ -159,17 +182,17 @@ for vm in VAL_MONTHS:
     # do NOT overwrite actuals for validation (we have them); keep actuals as lag source
 val_df = pd.concat(val_rows)
 
-m_xgb = metrics(val_df["cases"], val_df["pred"], "XGBoost LGA-level 2026Q1")
-m_base = metrics(val_df["cases"], val_df["snaive"], "Seasonal-naive LGA-level 2026Q1")
+m_xgb = metrics(val_df["cases"], val_df["pred"], f"XGBoost LGA-level {val_label}")
+m_base = metrics(val_df["cases"], val_df["snaive"], f"Seasonal-naive LGA-level {val_label}")
 # national aggregate validation
 natv = val_df.groupby("ym").agg(actual=("cases", "sum"), pred=("pred", "sum"),
                                 snaive=("snaive", "sum")).reset_index()
-m_nat = metrics(natv["actual"], natv["pred"], "XGBoost national 2026Q1")
-m_nat_b = metrics(natv["actual"], natv["snaive"], "Seasonal-naive national 2026Q1")
-print("VALIDATION (2026 Q1):")
+m_nat = metrics(natv["actual"], natv["pred"], f"XGBoost national {val_label}")
+m_nat_b = metrics(natv["actual"], natv["snaive"], f"Seasonal-naive national {val_label}")
+print(f"VALIDATION ({val_label}):")
 for mm in [m_xgb, m_base, m_nat, m_nat_b]:
     print(" ", mm)
-print("\nNational 2026Q1 actual vs pred:")
+print(f"\nNational {val_label} actual vs pred:")
 print(natv.round(0).to_string(index=False))
 
 # ============================ STEP 2: final fit + recursive forecast ===========
@@ -178,7 +201,7 @@ train_all = feat_all[(feat_all.ym <= VAL_MONTHS[-1]) & feat_all["cases"].notna()
 final_model = fit_model(train_all)
 
 work = panel.copy()
-future_start = VAL_MONTHS[-1] + 1  # 2026-04
+future_start = VAL_MONTHS[-1] + 1  # first month after the last real reported month
 for fm in range(future_start, FC_END + 1):
     fwork = build_features(work)
     rows = fwork[fwork.ym == fm]
@@ -206,7 +229,7 @@ nat = out.groupby(["ym", "year", "month", "is_forecast"], as_index=False).agg(
     cases=("cases", "sum"), population=("population", "sum"))
 nat.to_csv("forecast_national.csv", index=False)
 
-print("\nNATIONAL ANNUAL (actual 2023-25, forecast 2026-28):")
+print(f"\nNATIONAL ANNUAL (actual through {_ym_label(LAST_REAL_YM)}, forecast to {_ym_label(FC_END)}):")
 ann = out.groupby("year")["cases"].sum()
 print(ann.round(0).to_string())
 
@@ -223,6 +246,8 @@ with open("model_metrics.json", "w") as f:
                "national_q1": natv.round(1).to_dict(orient="records"),
                "national_annual": {int(k): float(v) for k, v in ann.items()},
                "features": FEATURES,
-               "train_window": "2023-01..2025-12 (val), ..2026-03 (final)",
+               "train_window": f"2023-01..{_ym_label(TRAIN_END)} (val), ..{_ym_label(LAST_REAL_YM)} (final)",
+               "last_real_month": _ym_label(LAST_REAL_YM),
+               "forecast_through": _ym_label(FC_END),
                "n_lgas": int(out.groupby(keys).ngroups)}, f, indent=2)
 print("\nSaved forecast_lga/state/national, model_metrics.json, feature_importance.csv")

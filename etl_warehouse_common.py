@@ -6,9 +6,15 @@ malaria's file-based pipeline, but reading live from the FMOH warehouse.
 Verified live against the warehouse during implementation:
   - public.dim_geo_location_master: admin_level=2 -> state (37 rows incl FCT),
     admin_level=3 -> LGA (853 rows).
-  - <schema>.fact_indicator_data (hiv/ncd/ntd/tb) joins to
+  - public.fact_indicator_data_<suffix> (hiv/ncd/ntd/tb) joins to
     public.dim_indicator_master on indicator_key, and to
-    public.dim_geo_location_master on geo_admin_location_key.
+    public.dim_geo_location_master on geo_admin_location_key. NOTE: these are
+    NOT separate schemas -- despite the disease_config.py field being named
+    "fact_schema", every disease's fact table lives under the single "public"
+    schema with a disease-suffixed table name (confirmed live: querying
+    "<name>.fact_indicator_data" as a schema-qualified table raises
+    psycopg2.errors.UndefinedTable -- the real table is
+    "public.fact_indicator_data_<name>").
 """
 import re
 import numpy as np
@@ -75,7 +81,9 @@ def fetch_fact_series(disease_id: str, indicator_name, level: str = "lga",
     source (e.g. 7 = NDARS) -- required whenever the same indicator_name could
     plausibly be reported by more than one system."""
     cfg = dc.DISEASES[disease_id]
-    schema = cfg["fact_schema"]
+    # "fact_schema" is a per-disease TABLE SUFFIX, not a real Postgres schema --
+    # every disease's fact table actually lives under public.fact_indicator_data_<suffix>.
+    fact_table = f'public.fact_indicator_data_{cfg["fact_schema"]}'
 
     names = [indicator_name] if isinstance(indicator_name, str) else list(indicator_name)
 
@@ -123,7 +131,7 @@ def fetch_fact_series(disease_id: str, indicator_name, level: str = "lga",
     sql = f"""
         with dedup_f as (
             select distinct on (f.hashkey) f.*
-            from {schema}.fact_indicator_data f
+            from {fact_table} f
             join public.dim_indicator_master d on d.indicator_key = f.indicator_key
             where d.indicator_name = ANY(:names) and f.year is not null and f.month is not null{where_sysid}
         )
@@ -195,7 +203,10 @@ def tb_safe_case_sum(male_series: pd.Series, female_series: pd.Series,
 # "full" tier (malaria only) is NOT implemented here -- malaria keeps its own
 # live client-side JS recomputation untouched. This module only implements
 # "volume_trend", the tier every new disease in this pass uses.
-ZONE_THRESHOLDS = [(18, "Not a Hotspot"), (38, "Green"), (58, "Yellow"), (78, "Amber")]
+# Raised bar for what counts as a hotspot -- see facility_api.py's
+# _ZONE_THRESHOLDS for the full rationale (kept identical here so every
+# disease's map uses one consistent colour scale).
+ZONE_THRESHOLDS = [(60, "Not a Hotspot"), (71, "Green"), (81, "Yellow"), (91, "Amber")]
 
 
 def zone_for_score(score: float) -> str:

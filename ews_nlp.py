@@ -102,7 +102,7 @@ def _resolve(extracted: dict) -> dict:
     return resolved
 
 
-@ews_router.get("/api/ews/meta")
+@ews_router.get("/ews/api/ews/meta")
 def ews_meta():
     return {
         "diseases": [{"key": k, "name": v["label"]} for k, v in DISEASES.items()],
@@ -130,7 +130,7 @@ class InterpretRequest(BaseModel):
     text: str
 
 
-@ews_router.post("/api/ews/interpret")
+@ews_router.post("/ews/api/ews/interpret")
 def ews_interpret(req: InterpretRequest):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:

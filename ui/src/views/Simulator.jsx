@@ -1,6 +1,167 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { Card, CompareChart, InfoTip } from '../components'
-import { loadLgas, fmt, fmtFull, COLORS, monthLabel } from '../lib'
+import { loadLgas, fmt, fmtFull, COLORS, monthLabel, API_BASE } from '../lib'
+
+// ── Mechanistic (Ross-Macdonald) panel ──────────────────────────────────────
+// A theory-driven COMPLEMENT to the empirical elasticity levers above, not a
+// replacement: instead of "% change in an indicator", the user tunes actual
+// entomological/clinical coverage (ITN, IRS, ACT) and sees the classic
+// vectorial-capacity / R0 equations respond, grounded in this location's REAL
+// population density and recent climate (see backend ross_macdonald.py for
+// the full derivation and literature parameter sources).
+export function MechanisticPanel({ level, lga, locLabel, baseSeries }) {
+  const [itn, setItn] = useState(40)
+  const [act, setAct] = useState(45)
+  // IRS / IPTp / vaccine start at `null` ("not yet touched") so the FIRST
+  // response can seed the slider from the backend's own default -- this
+  // location's REAL IPTp1 rate, and the illustrative IRS/vaccine national
+  // baselines (see ross_macdonald.py) -- rather than an arbitrary guess.
+  const [irs, setIrs] = useState(null)
+  const [iptp, setIptp] = useState(null)
+  const [vaccine, setVaccine] = useState(null)
+  const [mech, setMech] = useState(null)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    let live = true
+    const body = { level, lga: lga || null, itn_coverage: itn / 100, act_coverage: act / 100 }
+    if (irs != null) body.irs_coverage = irs / 100
+    if (iptp != null) body.iptp_coverage = iptp / 100
+    if (vaccine != null) body.vaccine_coverage = vaccine / 100
+    fetch(`${API_BASE}/whatif-mechanistic`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(async r => {
+      const d = await r.json().catch(() => null)
+      // A non-2xx response (e.g. 404 "no data for this location") still
+      // resolves fetch's promise -- it does NOT reject. Treating it as
+      // success here was the bug: `d` would be an error body like
+      // {"detail": "..."} with no `baseline`/`scenario`/`case_multiplier`,
+      // and rendering those as if they existed crashed the whole panel
+      // (the "not responding" report). Route non-ok responses to the error
+      // state instead of ever setting `mech` from them.
+      if (!r.ok) throw new Error((d && d.detail) || `HTTP ${r.status}`)
+      return d
+    }).then(d => {
+      if (!live) return
+      setMech(d); setErr(null)
+      if (d.available !== false && d.inputs) {
+        if (irs == null && d.inputs.irs_coverage != null) setIrs(Math.round(d.inputs.irs_coverage * 100))
+        if (iptp == null && d.inputs.iptp_coverage != null) setIptp(Math.round(d.inputs.iptp_coverage * 100))
+        if (vaccine == null && d.inputs.vaccine_coverage != null) setVaccine(Math.round(d.inputs.vaccine_coverage * 100))
+      }
+    }).catch(e => { if (live) { setErr(String(e.message || e)); setMech(null) } })
+    return () => { live = false }
+  }, [level, lga, itn, irs, act, iptp, vaccine])
+
+  // reset the "not yet touched" sliders whenever the location changes, so a
+  // new LGA's own real IPTp1 rate / baselines get picked up again.
+  useEffect(() => { setIrs(null); setIptp(null); setVaccine(null) }, [level, lga])
+
+  if (mech && mech.available === false) return null   // non-malaria disease -- silently hidden
+  const mechValid = !!(mech && mech.baseline && mech.scenario)   // defensive: never render a malformed response
+
+  const mult = mech?.case_multiplier ?? 1
+  const fc = (baseSeries || []).filter(d => d.forecast)
+  const baseTotal = fc.reduce((a, b) => a + b.cases, 0)
+  const scenTotal = baseTotal * mult
+  const merged = (baseSeries || []).map(d => ({
+    date: d.date, Baseline: Math.round(d.cases),
+    Mechanistic: d.forecast ? Math.round(d.cases * mult) : Math.round(d.cases),
+  }))
+
+  const lever = (label, val, setVal, hint) => {
+    const v = val ?? 0
+    return (
+      <div className="lever">
+        <div className="lever-head">
+          <span className="name">{label}</span>
+          <span className="val">{val == null ? '…' : `${v}%`}</span>
+        </div>
+        <input type="range" min={0} max={100} value={v} step={1}
+          style={{ '--pct': v + '%' }} onChange={e => setVal(+e.target.value)} />
+        <div className="lever-desc">{hint}</div>
+      </div>
+    )
+  }
+
+  const ctx = mech?.context || {}
+  const ctxRow = (label, entry, fmtFn = fmt) => entry && (
+    <tr>
+      <td>{label}</td>
+      <td className="num">{entry.value == null ? 'n/a' : fmtFn(entry.value)}</td>
+    </tr>
+  )
+
+  return (
+    <Card
+      title={<span>🦟 Mechanistic (Ross-Macdonald)
+        <InfoTip w={420} title="Theory-driven, not trained" text="This panel does NOT use statistical elasticities fit to historical correlations (that's the levers above). It runs the classic Ross-Macdonald vectorial-capacity / R0 equations for malaria transmission, using this location's REAL population density, PfPR, poverty/education deprivation, NDVI and IPTp1 coverage. Coverage sliders map to actual entomological/clinical effects -- ITN reduces biting rate AND kills mosquitoes; IRS kills mosquitoes indoors; ACT shortens the infectious period (discounted by socioeconomic access); IPTp and vaccine coverage are audience-scoped to pregnant women and under-5s respectively, not applied population-wide. Literature/WHO default parameters where no per-LGA data exists -- not fit to this dataset." /></span>}
+      sub={mech?.population != null
+        ? `${locLabel} — population ${fmt(mech.population)}, density ${mech.inputs?.pop_density ? Math.round(mech.inputs.pop_density).toLocaleString() + '/km²' : 'n/a'}`
+        : 'Loading location context…'}
+      style={{ marginTop: 18 }}>
+      {err && <div className="muted" style={{ fontSize: '.82rem' }}>Mechanistic model unavailable: {err}</div>}
+      {mechValid && (
+        <>
+          <div className="cat-label" style={{ marginTop: 0 }}>Location context
+            <InfoTip w={360} title="Where each number comes from" text="Population/PfPR/poverty/education/IPTp1/RDT are real warehouse-sourced data for this location. Pregnant-women and under-5 population are NOT measured per-LGA -- Nigeria doesn't publish that -- so they're derived from population x standard national demographic shares. The socioeconomic index blends poverty (MPI) and education deprivation (literacy proxy) into one 0-100 vulnerability score." /></div>
+          <table className="data" style={{ fontSize: '.8rem', marginBottom: 16 }}>
+            <tbody>
+              {ctxRow('Population', ctx.population)}
+              {ctxRow('Population density', { value: mech.inputs?.pop_density }, v => `${Math.round(v).toLocaleString()}/km²`)}
+              {ctxRow('Infected population (est.)', ctx.infected_population_estimate)}
+              {ctxRow('Pregnant women (est.)', ctx.pregnant_women_population)}
+              {ctxRow('Children under 5 (est.)', ctx.under5_population)}
+              {ctxRow('Socioeconomic vulnerability', ctx.socioeconomic_vulnerability_index, v => `${v}/100`)}
+              {ctxRow('IPTp coverage (reported)', ctx.iptp1_coverage_real, v => `${v}%`)}
+              {ctxRow('RDT tests/month (reported)', ctx.rdt_tests_per_month)}
+            </tbody>
+          </table>
+
+          <div className="row" style={{ gap: 24, alignItems: 'stretch' }}>
+            <div className="col" style={{ flex: 1, minWidth: 260, maxWidth: 360 }}>
+              <div className="cat-label" style={{ marginTop: 0 }}>Vector control &amp; treatment coverage</div>
+              {lever('ITN / LLIN use', itn, setItn, 'Bednet use: deters biting and kills mosquitoes on contact')}
+              {lever('IRS coverage', irs, setIrs, 'Indoor residual spraying: kills mosquitoes resting indoors (starts at an illustrative NMEP-consistent baseline -- no per-LGA IRS data exists)')}
+              {lever('Effective ACT treatment', act, setAct, 'Shortens the human infectious period; discounted by this area’s socioeconomic access factor')}
+              {lever('IPTp coverage (pregnant women)', iptp, setIptp, 'Starts at this LGA’s own reported rate. Scoped to pregnant women only (~4.4% of population) -- not a population-wide effect')}
+              {lever('Vaccine / child immunisation', vaccine, setVaccine, 'Starts at an illustrative NDHS-consistent national baseline. Scoped to under-5 children only (~17.5% of population)')}
+            </div>
+            <div className="col" style={{ flex: 1, minWidth: 260 }}>
+              <div className="row" style={{ gap: 12 }}>
+                <div className="col scenario-readout" style={{ minWidth: 0 }}>
+                  <div className="lbl">R0 (baseline → scenario)</div>
+                  <div className="big" style={{ fontSize: '1.5rem' }}>
+                    {mech.baseline.R0.toFixed(1)} → <span style={{ color: mech.scenario.R0 < mech.baseline.R0 ? COLORS.green : COLORS.coral }}>{mech.scenario.R0.toFixed(1)}</span>
+                  </div>
+                </div>
+                <div className="col scenario-readout" style={{ minWidth: 0 }}>
+                  <div className="lbl">Steady-state prevalence</div>
+                  <div className="big" style={{ fontSize: '1.5rem' }}>
+                    {(mech.baseline.steady_state_prevalence * 100).toFixed(0)}% → <span style={{ color: mech.scenario.steady_state_prevalence < mech.baseline.steady_state_prevalence ? COLORS.green : COLORS.coral }}>{(mech.scenario.steady_state_prevalence * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              </div>
+              <div className="muted" style={{ fontSize: '.76rem', marginTop: 10, lineHeight: 1.6 }}>
+                Vectorial capacity: {mech.baseline.vectorial_capacity} → {mech.scenario.vectorial_capacity} infectious bites/day per infectious human.
+                Extrinsic incubation ~{mech.derived.extrinsic_incubation_days}d at this location's recent temperature.
+                Effective ACT coverage (after access discount): {(mech.derived.act_effective_coverage * 100).toFixed(0)}%.
+                Case multiplier ×<b>{mult.toFixed(3)}</b> applied to the forecast below.
+              </div>
+            </div>
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <CompareChart data={merged} height={220} series={[
+              { key: 'Baseline', name: 'Baseline forecast', color: COLORS.accent2, dashed: true },
+              { key: 'Mechanistic', name: 'Mechanistic scenario', color: mult <= 1 ? COLORS.accent : COLORS.coral },
+            ]} />
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
 
 // per-driver multiplicative effect on cases, relative to the location's forecasted baseline.
 // `audience` (0-1) scopes a subgroup-targeted intervention (e.g. under-5 LLIN coverage only
@@ -188,6 +349,8 @@ export default function Simulator({ data, variant = 'after', disease = 'malaria'
           )}
         </div>
       </div>
+
+      <MechanisticPanel level={level} lga={lga} locLabel={locLabel} baseSeries={baseSeries} />
     </>
   )
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useData } from './lib'
+import { useData, API_BASE } from './lib'
 import Overview from './views/Overview'
 import GeoExplorer from './views/GeoExplorer'
 import Forecast from './views/Forecast'
@@ -12,41 +12,55 @@ import VisualOverview from './views/VisualOverview'
 import DataNotes from './views/DataNotes'
 import Benchmarking from './views/Benchmarking'
 import Dashboard from './views/Dashboard'
+import ManagerDashboard from './views/ManagerDashboard'
 
-// Minister-facing sidebar: two plain-language groups always open, plus a
-// "Deep Dive" group for technical/model-internals sections, collapsed by default.
+// Minister-facing top nav: two plain-language groups always visible, plus a
+// "Deep Dive" dropdown for technical/model-internals sections, collapsed by default.
 // Visual Overview leads the list — it's the map ministers actually look at;
 // National Overview is internal ML-model experimentation, so it lives in Deep Dive.
-// Built from the selected disease's `capabilities` block (from /api/diseases) so
-// malaria's full sidebar renders unchanged, while thinner diseases simply omit
+// Built from the selected disease's `capabilities` block (from /ews/api/diseases) so
+// malaria's full nav renders unchanged, while thinner diseases simply omit
 // items their data can't support — never a disabled/greyed-out item.
-function buildNavGroups(label, caps) {
+function buildNavGroups(label, caps, disease) {
   // Forecastive "Dashboard" always leads the disease's overview group, sitting
   // directly above the (descriptive) Visual Overview. Every disease has the
   // national/state/meta series it needs, so it's not capability-gated — it just
   // degrades to an honest "no forecast yet" banner for diseases like TB.
+  // For malaria the "Dashboard" IS the MalariaIQ command console (the
+  // constellation-map dashboard the programme lead supplied), which now embeds
+  // the forecast command-centre inside its Command Overview page. Other
+  // diseases keep the plain forecast Dashboard component.
   const overviewItems = [
     { id: 'dashboard', label: 'Dashboard', ico: '📈' },
-    { id: 'visual', label: 'Visual Overview', ico: '🗺️' },
+    { id: 'visual', label: 'What If Simulation', ico: '🗺️' },
   ]
   // 'visuallga' (a separate "All-LGA Hotspot Map" item rendering VisualOverview
   // with allLgas) is hidden from the nav -- Visual Overview's own State/LGA
   // scope toggle already covers it, so a second nav entry for the same map is
   // redundant. The route + component still exist below (App.jsx's view==='visuallga'
-  // branch), just not linked from the sidebar.
+  // branch), just not linked from the top nav.
 
+  // For malaria, What If Simulation / What-If Simulator / What-If Lab are ONE
+  // tab (per user request) -- levers, map, trend chart, and Budget Planning
+  // (the SARIMAX feature simulator + budget optimiser) all live inside
+  // VisualOverview now, so those nav entries are dropped instead of pointing
+  // at duplicate/dead pages. Other diseases (e.g. HIV) still use the
+  // standalone Simulator/WhatIfLab components unchanged, since they don't get
+  // the malaria-only merged view.
   const interventionItems = []
-  if (caps.simulator) interventionItems.push({ id: 'simulator', label: 'What-If Simulator', ico: '🎛️' })
-  if (caps.whatiflab) interventionItems.push({ id: 'whatiflab', label: 'What-If Lab', ico: '🔬' })
+  if (disease !== 'malaria') {
+    if (caps.simulator) interventionItems.push({ id: 'simulator', label: 'What-If Simulator', ico: '🎛️' })
+    if (caps.whatiflab) interventionItems.push({ id: 'whatiflab', label: 'Budget Planning', ico: '🔬' })
+  }
 
   const insightItems = []
-  if (caps.benchmarking) insightItems.push({ id: 'benchmarking', label: 'AI Insights & Benchmarking', ico: '📈' })
+  if (caps.benchmarking) insightItems.push({ id: 'benchmarking', label: 'Comparative Benchmarking', ico: '📈' })
 
   const groups = [
     { id: 'g-overview', label: `${label} Overview`, items: overviewItems },
   ]
   if (interventionItems.length) groups.push({ id: 'g-intervention', label: 'Intervention Planning', items: interventionItems })
-  if (insightItems.length) groups.push({ id: 'g-insights', label: 'AI Insights & Benchmarking', items: insightItems })
+  if (insightItems.length) groups.push({ id: 'g-insights', label: 'Comparative Benchmarking', items: insightItems })
   return groups
 }
 
@@ -103,13 +117,12 @@ export default function App() {
   const [disease, setDisease] = useState(initialDisease)
   const [view, setView] = useState('visual')
   const variant = 'after'
-  const [deepDiveOpen, setDeepDiveOpen] = useState(false)
   const { data, err } = useData(variant, disease)
 
   // load the disease list once on mount — until it resolves, only malaria's
   // tab renders (today's exact UI), so there's never a layout flash.
   useEffect(() => {
-    fetch('/api/diseases')
+    fetch(`${API_BASE}/diseases`)
       .then(r => r.json())
       .then(d => setDiseases(Array.isArray(d) ? d : null))
       .catch(() => setDiseases(null))
@@ -118,7 +131,7 @@ export default function App() {
   const activeCfg = diseases?.find(d => d.id === disease)
   const caps = disease === 'malaria' ? MALARIA_CAPS : (activeCfg?.capabilities || MALARIA_CAPS)
   const label = activeCfg?.label || (disease === 'malaria' ? 'Malaria' : disease)
-  const navGroups = buildNavGroups(label, caps)
+  const navGroups = buildNavGroups(label, caps, disease)
   const deepDiveItems = buildDeepDiveItems(caps, disease)
 
   // if switching disease drops the current view from its nav (e.g. leaving a
@@ -130,71 +143,53 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="logo">{GROUP_ICONS[activeCfg?.group] || '🦟'}</span>
-          <div>
-            <h1>{label} Risk<br />Intelligence</h1>
-            <div className="sub">Nigeria · DHIS2</div>
+      <header className="topbar">
+        <div className="topbar-top">
+          <div className="brand">
+            <span className="logo">{GROUP_ICONS[activeCfg?.group] || '🦟'}</span>
+            <div>
+              {!embedded && <h1>{label} Risk Intelligence</h1>}
+              <div className="sub">Nigeria · DHIS2</div>
+            </div>
           </div>
+
+          {diseases && diseases.length > 1 && !(embedded && !embedGroup) && (
+            <div className="disease-tabs">
+              {diseases
+                .filter(d => !(embedded && embedGroup) || d.group === embedGroup)
+                .map(d => (
+                  <button key={d.id} className={`disease-tab ${disease === d.id ? 'active' : ''}`}
+                    onClick={() => selectDisease(d.id)} title={d.label}>
+                    {d.label}
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
 
-        {diseases && diseases.length > 1 && !(embedded && !embedGroup) && (
-          <div className="disease-tabs">
-            {diseases
-              .filter(d => !(embedded && embedGroup) || d.group === embedGroup)
-              .map(d => (
-                <button key={d.id} className={`disease-tab ${disease === d.id ? 'active' : ''}`}
-                  onClick={() => selectDisease(d.id)} title={d.label}>
-                  {d.label}
-                </button>
-              ))}
-          </div>
-        )}
-
-        <nav className="nav">
-          {navGroups.map(g => (
-            <div className="nav-group" key={g.id}>
-              <div className="nav-group-label">{g.label}</div>
+        <nav className="topnav">
+          {navGroups.map((g, gi) => (
+            <React.Fragment key={g.id}>
+              {gi > 0 && <span className="topnav-sep" aria-hidden="true" />}
               {g.items.map(n => (
                 <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => setView(n.id)}>
                   <span className="ico">{n.ico}</span>{n.label}
                 </button>
               ))}
-            </div>
+            </React.Fragment>
           ))}
-
-          {deepDiveItems.length > 0 && (
-            <div className="nav-group">
-              <button className="nav-deepdive-toggle" onClick={() => setDeepDiveOpen(o => !o)}>
-                <span className="ico">🧬</span>Deep Dive
-                <span className="chev">{deepDiveOpen ? '▾' : '▸'}</span>
-              </button>
-              {deepDiveOpen && (
-                <div className="nav-deepdive-items">
-                  {deepDiveItems.map(n => (
-                    <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => setView(n.id)}>
-                      <span className="ico">{n.ico}</span>{n.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </nav>
-        <div className="sidebar-foot">
-          Facility-level surveillance aggregated to LGA / State.<br />
-          WHO/SEIR climate, spatial &amp; mechanistic models.
-        </div>
-      </aside>
+      </header>
 
-      <main className="main">
-        {err && <div className="loading" style={{ color: '#e11d48' }}>Failed to load data: {err}</div>}
+      <main className={view === 'dashboard' && disease === 'malaria' ? 'main main--full' : 'main'}>
+        {err && <div className="loading" style={{ color: 'var(--coral)' }}>Failed to load data: {err}</div>}
         {!data && !err && <div className="loading"><div className="spinner" />Loading data…</div>}
-        {data && view === 'dashboard' && <Dashboard data={data} variant={variant} disease={disease} label={label} />}
+        {data && view === 'dashboard' && (disease === 'malaria'
+          ? <ManagerDashboard data={data} variant={variant} disease={disease} />
+          : <Dashboard data={data} variant={variant} disease={disease} label={label} />)}
         {data && view === 'overview' && <Overview data={data} variant={variant} disease={disease} />}
-        {data && view === 'visual' && <VisualOverview data={data} variant={variant} disease={disease} />}
-        {data && view === 'visuallga' && <VisualOverview data={data} variant={variant} allLgas disease={disease} />}
+        {data && view === 'visual' && <VisualOverview data={data} variant={variant} disease={disease} deepDiveItems={deepDiveItems} activeView={view} onNavigate={setView} />}
+        {data && view === 'visuallga' && <VisualOverview data={data} variant={variant} allLgas disease={disease} deepDiveItems={deepDiveItems} activeView={view} onNavigate={setView} />}
         {data && view === 'geo' && <GeoExplorer data={data} variant={variant} disease={disease} />}
         {data && view === 'forecast' && <Forecast data={data} variant={variant} disease={disease} />}
         {data && view === 'simulator' && <Simulator data={data} variant={variant} disease={disease} />}

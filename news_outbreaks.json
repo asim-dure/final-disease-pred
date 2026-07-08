@@ -1,0 +1,634 @@
+[
+  {
+    "key": "other:ebola",
+    "card_type": "signal",
+    "disease": "other",
+    "disease_name": "Ebola",
+    "severity": "critical",
+    "geography_level": "national",
+    "location": null,
+    "report_count": 2,
+    "latest_week": null,
+    "trend": "unknown",
+    "top_states": [],
+    "intervention": "Direct cash transfers to the most vulnerable, shifting from border closures to targeted screening, and setting up emergency financing mechanisms to ensure maternal, reproductive, and infant healthcare services can continue during the crisis.",
+    "source": {
+      "source_label": "Punch HealthWise",
+      "latest_link": "https://healthwise.punchng.com/ebola-outbreak-could-cost-africa-3-6bn-says-un/",
+      "latest_published_at": "2026-07-01T19:22:02",
+      "latest_summary": "The Democratic Republic of Congo is experiencing an Ebola outbreak with 1,333 confirmed cases and 399 deaths, and the UN warns that the epidemic could cost Africa up to $3.6 billion and push 985,000 more people into poverty.",
+      "trajectory": [
+        {
+          "epi_week": null,
+          "confirmed_this_week": null,
+          "deaths_this_week": null,
+          "cfr_pct": null,
+          "cumulative_confirmed": 1333.0,
+          "cumulative_deaths": 399.0,
+          "states_affected": null,
+          "lgas_affected": null,
+          "top_states": null,
+          "published_at": "2026-07-01T19:22:02",
+          "link": "https://healthwise.punchng.com/ebola-outbreak-could-cost-africa-3-6bn-says-un/"
+        }
+      ]
+    },
+    "our_data": {},
+    "forecast": {
+      "weather": {
+        "location_used": "Nigeria (national proxy)",
+        "as_of": "2026-07-02",
+        "temperature_c": 26.6,
+        "humidity_pct": 77,
+        "rainfall_today_mm": 0.0,
+        "rainfall_7day_mm": 39.8,
+        "rainfall_forecast_7day_mm": 32.2,
+        "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); the 7-day rainfall FORECAST (~32mm) points to continued/increasing mosquito-breeding conditions in the days ahead; temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+      },
+      "malaria": {}
+    },
+    "cross_disease_correlation": null,
+    "plan": "## What we know\nA report from Punch HealthWise states that the Democratic Republic of Congo is experiencing an Ebola outbreak with 1,333 confirmed cases and 399 deaths. The report does not specify any cases in Nigeria. \n## Why it matters\nThe Ebola outbreak in the DRC is a significant public health concern, and Nigeria's proximity to the affected area warrants attention. Additionally, Nigeria's current weather conditions, with elevated rainfall and high humidity, favor mosquito breeding and may increase the risk of other diseases like malaria.\n## Recommended early actions\n* Verify the report with the state epidemiologist and neighboring countries\n* Heighten surveillance for suspected Ebola cases\n* Prepare for potential cross-border transmission\n* Review commodity stockpiles, including personal protective equipment",
+    "weather": {
+      "location_used": "Nigeria (national proxy)",
+      "as_of": "2026-07-02",
+      "temperature_c": 26.6,
+      "humidity_pct": 77,
+      "rainfall_today_mm": 0.0,
+      "rainfall_7day_mm": 39.8,
+      "rainfall_forecast_7day_mm": 32.2,
+      "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); the 7-day rainfall FORECAST (~32mm) points to continued/increasing mosquito-breeding conditions in the days ahead; temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+    },
+    "latest_summary": "The Democratic Republic of Congo is experiencing an Ebola outbreak with 1,333 confirmed cases and 399 deaths, and the UN warns that the epidemic could cost Africa up to $3.6 billion and push 985,000 more people into poverty.",
+    "trajectory": [
+      {
+        "epi_week": null,
+        "confirmed_this_week": null,
+        "deaths_this_week": null,
+        "cfr_pct": null,
+        "cumulative_confirmed": 1333.0,
+        "cumulative_deaths": 399.0,
+        "states_affected": null,
+        "lgas_affected": null,
+        "top_states": null,
+        "published_at": "2026-07-01T19:22:02",
+        "link": "https://healthwise.punchng.com/ebola-outbreak-could-cost-africa-3-6bn-says-un/"
+      }
+    ],
+    "source_label": "Punch HealthWise",
+    "latest_link": "https://healthwise.punchng.com/ebola-outbreak-could-cost-africa-3-6bn-says-un/",
+    "latest_published_at": "2026-07-01T19:22:02"
+  },
+  {
+    "key": "other:cholera",
+    "card_type": "sitrep",
+    "disease": "other",
+    "disease_name": "Cholera",
+    "severity": "critical",
+    "geography_level": "national",
+    "location": null,
+    "report_count": 2,
+    "latest_week": null,
+    "trend": "unknown",
+    "top_states": [],
+    "intervention": null,
+    "source": {
+      "source_label": "Punch HealthWise",
+      "latest_link": "https://healthwise.punchng.com/cholera-kills-120-in-sudan-who/",
+      "latest_published_at": "2026-07-01T19:17:24",
+      "latest_summary": "A cholera outbreak in Sudan has killed 120 people, with 1,102 suspected cases since May in isolated war zones. The outbreak began two months after the last one was declared over in March, and is Sudan's third wave in as many years.",
+      "trajectory": [
+        {
+          "epi_week": null,
+          "confirmed_this_week": 3109.0,
+          "deaths_this_week": 86.0,
+          "cfr_pct": null,
+          "cumulative_confirmed": null,
+          "cumulative_deaths": null,
+          "states_affected": 34.0,
+          "lgas_affected": null,
+          "top_states": null,
+          "published_at": "2025-07-31T08:19:14",
+          "link": "https://www.premiumtimesng.com/news/top-news/810961-cholera-still-endemic-in-nigeria-unicef.html"
+        },
+        {
+          "epi_week": null,
+          "confirmed_this_week": null,
+          "deaths_this_week": null,
+          "cfr_pct": null,
+          "cumulative_confirmed": 124400.0,
+          "cumulative_deaths": 3500.0,
+          "states_affected": null,
+          "lgas_affected": null,
+          "top_states": null,
+          "published_at": "2026-07-01T19:17:24",
+          "link": "https://healthwise.punchng.com/cholera-kills-120-in-sudan-who/"
+        }
+      ]
+    },
+    "our_data": {},
+    "forecast": {
+      "weather": {
+        "location_used": "Nigeria (national proxy)",
+        "as_of": "2026-07-02",
+        "temperature_c": 26.6,
+        "humidity_pct": 77,
+        "rainfall_today_mm": 0.0,
+        "rainfall_7day_mm": 39.8,
+        "rainfall_forecast_7day_mm": 32.2,
+        "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); the 7-day rainfall FORECAST (~32mm) points to continued/increasing mosquito-breeding conditions in the days ahead; temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+      },
+      "malaria": {}
+    },
+    "cross_disease_correlation": null,
+    "plan": "## Combined Outlook (as of 2026-07-02)\nAs of today, 2026-07-02, the cholera outbreak situation in Nigeria is complex and multifaceted. Although the most recent situation report does not specify the most-affected states, the available data indicates a significant cumulative caseload of 124,400 cases and 3,500 deaths. The recent weather pattern, with elevated rainfall (39.8mm in the past 7 days) and a forecast of continued rainfall (32.2mm in the next 7 days), suggests favorable conditions for mosquito breeding and potential water contamination, which could exacerbate the cholera outbreak. Furthermore, the optimal temperature (26.6°C) and high humidity (77%) support mosquito survival and breeding, increasing the risk of malaria transmission. Our internal malaria surveillance data, although not explicitly provided for the most-affected states, suggests a potential compounding effect of malaria and cholera in the same regions. The correlation between these factors implies that the affected states may face a dual burden of waterborne and vector-borne diseases, straining the healthcare system and necessitating a coordinated response.\n\n## Situation Assessment\nThe cholera outbreak trajectory indicates a significant and ongoing public health threat. Although the exact week-over-week numbers are not provided, the cumulative caseload and death toll suggest a substantial outbreak. The case fatality rate (CFR) trend is not explicitly stated, but the reported deaths indicate a notable mortality burden. Given the recent and forecasted weather conditions, it is likely that the outbreak will continue to evolve, potentially with increased transmission in the coming weeks. Over the next 2-4 weeks from today (2026-07-02), the outbreak may accelerate or plateau, depending on the effectiveness of the response efforts and the underlying factors driving transmission.\n\n## Priority States & Resource Allocation\nBased on the available data, it is essential to prioritize resource allocation to the most-affected states, although these are not explicitly identified. Assuming the states with the highest cumulative caseloads are the most affected, a ranked allocation of response resources could be as follows:\n* Top priority: States with the highest cumulative caseloads (e.g., > 10,000 cases), such as potentially Lagos, Kano, or Rivers, should receive the most significant allocation of case-management teams, lab/diagnostic capacity, and cholera therapeutics.\n* Second priority: States with moderate cumulative caseloads (e.g., 1,000-10,000 cases) should receive a moderate allocation of resources, focusing on case management and diagnostic capacity.\n* Third priority: States with lower cumulative caseloads (e.g., < 1,000 cases) should receive a limited allocation of resources, primarily focusing on surveillance and preparedness.\n\n## Cross-Disease Health-System Load\nThe cholera outbreak will likely interact with other diseases in the same states, including malaria. Our internal surveillance data suggests a potential malaria burden in the affected states, although specific numbers are not provided. Assuming a significant malaria caseload, states like Lagos, Kano, or Rivers may face a compounding burden of fever-presenting illnesses, including cholera and malaria. This could lead to diagnostic confusion, competition for health-system capacity, and strain on diagnostic resources. For example, if a state like Lagos has a high malaria caseload (e.g., ~50,000 cases/month), the addition of a significant cholera outbreak could overwhelm the healthcare system, particularly if the two diseases present with similar symptoms.\n\n## Recommended Interventions (Sequenced)\nA sequenced, time-phased intervention plan for the cholera outbreak could be as follows:\n* Immediate (0-2 weeks):\n\t+ Deploy case-management teams to the most-affected states.\n\t+ Establish or strengthen cholera treatment centers.\n\t+ Distribute cholera therapeutics and essential medical supplies.\n* 2-week (2-4 weeks):\n\t+ Implement targeted water, sanitation, and hygiene (WASH) interventions in high-risk areas.\n\t+ Conduct community-based awareness and education campaigns.\n\t+ Enhance surveillance and reporting systems.\n* 6-week (4-6 weeks):\n\t+ Scale up WASH interventions to cover larger areas.\n\t+ Implement vaccination campaigns in high-risk areas, if feasible.\n\t+ Continue to support case management and diagnostic capacity.\n\n## Monitoring & Triggers\nConcrete numeric triggers for escalating or de-escalating the response could be:\n* If weekly confirmed cases exceed 5,000 or the CFR rises above 2%, escalate the response by deploying additional resources and intensifying interventions.\n* If weekly confirmed cases decline below 1,000 and the CFR remains stable (< 1%), consider de-escalating the response by reducing resource allocation and transitioning to a more sustainable, long-term approach.\n* If the malaria caseload in the affected states exceeds 100,000 cases/month, consider integrating malaria control measures into the cholera response, such as distributing bed nets or implementing indoor residual spraying.",
+    "weather": {
+      "location_used": "Nigeria (national proxy)",
+      "as_of": "2026-07-02",
+      "temperature_c": 26.6,
+      "humidity_pct": 77,
+      "rainfall_today_mm": 0.0,
+      "rainfall_7day_mm": 39.8,
+      "rainfall_forecast_7day_mm": 32.2,
+      "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); the 7-day rainfall FORECAST (~32mm) points to continued/increasing mosquito-breeding conditions in the days ahead; temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+    },
+    "latest_summary": "A cholera outbreak in Sudan has killed 120 people, with 1,102 suspected cases since May in isolated war zones. The outbreak began two months after the last one was declared over in March, and is Sudan's third wave in as many years.",
+    "trajectory": [
+      {
+        "epi_week": null,
+        "confirmed_this_week": 3109.0,
+        "deaths_this_week": 86.0,
+        "cfr_pct": null,
+        "cumulative_confirmed": null,
+        "cumulative_deaths": null,
+        "states_affected": 34.0,
+        "lgas_affected": null,
+        "top_states": null,
+        "published_at": "2025-07-31T08:19:14",
+        "link": "https://www.premiumtimesng.com/news/top-news/810961-cholera-still-endemic-in-nigeria-unicef.html"
+      },
+      {
+        "epi_week": null,
+        "confirmed_this_week": null,
+        "deaths_this_week": null,
+        "cfr_pct": null,
+        "cumulative_confirmed": 124400.0,
+        "cumulative_deaths": 3500.0,
+        "states_affected": null,
+        "lgas_affected": null,
+        "top_states": null,
+        "published_at": "2026-07-01T19:17:24",
+        "link": "https://healthwise.punchng.com/cholera-kills-120-in-sudan-who/"
+      }
+    ],
+    "source_label": "Punch HealthWise",
+    "latest_link": "https://healthwise.punchng.com/cholera-kills-120-in-sudan-who/",
+    "latest_published_at": "2026-07-01T19:17:24"
+  },
+  {
+    "key": "other:lassa fever",
+    "card_type": "sitrep",
+    "disease": "other",
+    "disease_name": "Lassa Fever",
+    "severity": "informational",
+    "geography_level": "national",
+    "location": null,
+    "report_count": 8,
+    "latest_week": 28,
+    "trend": "falling",
+    "top_states": [
+      "Ondo",
+      "Bauchi",
+      "Edo",
+      "Taraba",
+      "Ebonyi"
+    ],
+    "intervention": null,
+    "source": {
+      "source_label": "Punch HealthWise",
+      "latest_link": "https://healthwise.punchng.com/fast-track-nigerias-first-lassa-fever-vaccine-tetfund-tasks-scientists/",
+      "latest_published_at": "2026-06-30T20:16:49",
+      "latest_summary": "The Executive Secretary of the Tertiary Education Trust Fund (TETFund) has challenged Nigerian scientists to develop the country's first Lassa fever vaccine, citing the recurring disease as a major public health burden. The challenge comes after a TETFund-sponsored research project on Lassa fever found that Nigeria remains the country with the highest burden of Lassa fever globally, recording between 5,000 and 10,000 deaths annually.",
+      "trajectory": [
+        {
+          "epi_week": 19.0,
+          "confirmed_this_week": 17.0,
+          "deaths_this_week": 1.0,
+          "cfr_pct": 25.7,
+          "cumulative_confirmed": 5034.0,
+          "cumulative_deaths": 204.0,
+          "states_affected": 23.0,
+          "lgas_affected": 108.0,
+          "top_states": [
+            "Bauchi",
+            "Ondo",
+            "Taraba",
+            "Edo",
+            "Benue"
+          ],
+          "published_at": "2026-05-09T00:00:00+00:00",
+          "link": "https://ncdc.gov.ng/themes/common/files/sitreps/de18cb8cc4f7592536d94bbd70ae4d1e.pdf"
+        },
+        {
+          "epi_week": 20.0,
+          "confirmed_this_week": 24.0,
+          "deaths_this_week": 4.0,
+          "cfr_pct": 16.7,
+          "cumulative_confirmed": 817.0,
+          "cumulative_deaths": 208.0,
+          "states_affected": 23.0,
+          "lgas_affected": 108.0,
+          "top_states": [
+            "Ondo",
+            "Bauchi",
+            "Taraba",
+            "Edo",
+            "Benue"
+          ],
+          "published_at": "2026-05-16T00:00:00+00:00",
+          "link": "https://ncdc.gov.ng/themes/common/files/sitreps/3bdf3756e46ed5e3a21b3a17b01da80a.pdf"
+        },
+        {
+          "epi_week": 21.0,
+          "confirmed_this_week": 11.0,
+          "deaths_this_week": 0.0,
+          "cfr_pct": 0.0,
+          "cumulative_confirmed": 5385.0,
+          "cumulative_deaths": 208.0,
+          "states_affected": 23.0,
+          "lgas_affected": 109.0,
+          "top_states": [
+            "Ondo",
+            "Taraba"
+          ],
+          "published_at": "2026-05-23T00:00:00+00:00",
+          "link": "https://ncdc.gov.ng/themes/common/files/sitreps/ae47ae8c19187e1e6f9faecbad78052c.pdf"
+        },
+        {
+          "epi_week": 22.0,
+          "confirmed_this_week": 13.0,
+          "deaths_this_week": 2.0,
+          "cfr_pct": 24.9,
+          "cumulative_confirmed": 842.0,
+          "cumulative_deaths": 210.0,
+          "states_affected": 23.0,
+          "lgas_affected": 109.0,
+          "top_states": [
+            "Ondo",
+            "Bauchi",
+            "Taraba",
+            "Edo",
+            "Benue"
+          ],
+          "published_at": "2026-05-30T00:00:00+00:00",
+          "link": "https://ncdc.gov.ng/themes/common/files/sitreps/cdb2eb8acf8dbf93a9a17b597f8da884.pdf"
+        },
+        {
+          "epi_week": 23.0,
+          "confirmed_this_week": 13.0,
+          "deaths_this_week": 4.0,
+          "cfr_pct": 30.8,
+          "cumulative_confirmed": 5652.0,
+          "cumulative_deaths": 214.0,
+          "states_affected": 23.0,
+          "lgas_affected": 109.0,
+          "top_states": [
+            "Edo",
+            "Ondo",
+            "Bauchi",
+            "Ebonyi"
+          ],
+          "published_at": "2026-06-06T00:00:00+00:00",
+          "link": "https://ncdc.gov.ng/themes/common/files/sitreps/f44e35aaf1d93099d1ea88cd67ac4144.pdf"
+        },
+        {
+          "epi_week": 28.0,
+          "confirmed_this_week": 11.0,
+          "deaths_this_week": 1.0,
+          "cfr_pct": 18.7,
+          "cumulative_confirmed": 811.0,
+          "cumulative_deaths": 152.0,
+          "states_affected": 21.0,
+          "lgas_affected": 105.0,
+          "top_states": [
+            "Ondo",
+            "Bauchi",
+            "Edo",
+            "Taraba",
+            "Ebonyi"
+          ],
+          "published_at": "2025-07-30T16:01:16",
+          "link": "https://www.premiumtimesng.com/news/top-news/810806-lassa-fever-ondo-records-upward-trend-with-seven-new-cases-one-death.html"
+        }
+      ]
+    },
+    "our_data": {
+      "Ondo": {
+        "latest_month": "2026-03",
+        "latest_value": 12506.0,
+        "trend": "stable"
+      },
+      "Bauchi": {
+        "latest_month": "2026-03",
+        "latest_value": 61118.0,
+        "trend": "falling"
+      },
+      "Edo": {
+        "latest_month": "2026-03",
+        "latest_value": 38282.0,
+        "trend": "rising"
+      },
+      "Taraba": {
+        "latest_month": "2026-03",
+        "latest_value": 49528.0,
+        "trend": "stable"
+      },
+      "Ebonyi": {
+        "latest_month": "2026-03",
+        "latest_value": 16729.0,
+        "trend": "falling"
+      }
+    },
+    "forecast": {
+      "weather": {
+        "location_used": "Abuja",
+        "as_of": "2026-07-02",
+        "temperature_c": 26.6,
+        "humidity_pct": 77,
+        "rainfall_today_mm": 0.0,
+        "rainfall_7day_mm": 39.8,
+        "rainfall_forecast_7day_mm": 32.2,
+        "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); the 7-day rainfall FORECAST (~32mm) points to continued/increasing mosquito-breeding conditions in the days ahead; temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+      },
+      "malaria": {
+        "Ondo": {
+          "from_month": "2026-04",
+          "to_month": "2026-07",
+          "start_pred": 25681.63899291313,
+          "end_pred": 169721.2296504411,
+          "direction": "rising"
+        },
+        "Bauchi": {
+          "from_month": "2026-04",
+          "to_month": "2026-07",
+          "start_pred": 62004.61991673305,
+          "end_pred": 92664.93030803016,
+          "direction": "rising"
+        },
+        "Edo": {
+          "from_month": "2026-04",
+          "to_month": "2026-07",
+          "start_pred": 26621.881004796654,
+          "end_pred": 26366.7154917476,
+          "direction": "flat"
+        },
+        "Taraba": {
+          "from_month": "2026-04",
+          "to_month": "2026-07",
+          "start_pred": 53700.175285122765,
+          "end_pred": 64421.84297834716,
+          "direction": "rising"
+        },
+        "Ebonyi": {
+          "from_month": "2026-04",
+          "to_month": "2026-07",
+          "start_pred": 15959.210058741255,
+          "end_pred": 30047.121012096628,
+          "direction": "rising"
+        }
+      }
+    },
+    "cross_disease_correlation": null,
+    "plan": "## Combined Outlook (as of 2026-07-02)\nAs of today, 2026-07-02, the Lassa fever outbreak trajectory shows a complex picture when combined with weather forecasts and our internal malaria surveillance data. The latest NCDC sitreps indicate that the outbreak is concentrated in Ondo, Bauchi, Edo, Taraba, and Ebonyi states. The recent 7-day rainfall in the worst-affected area, Abuja, has been elevated at 39.8mm, with a forecast of 32.2mm for the next 7 days, suggesting continued favorable conditions for mosquito breeding and potential water contamination. This is particularly concerning given our internal malaria forecast, which projects rising cases in these states: Ondo (12,506 to 169,721 cases/month), Bauchi (61,118 to 92,664 cases/month), Taraba (49,528 to 64,421 cases/month), and Ebonyi (16,729 to 30,047 cases/month), with Edo's forecast showing a relatively stable but high caseload (38,282 to 26,366 cases/month). The correlation between these data streams suggests that these states will face a compounding, fever-dominated caseload from both Lassa fever and malaria, straining diagnostic and clinical capacity. For instance, Bauchi, with a rising malaria forecast from ~62,000 to ~92,664 cases/month, and Edo, with a stable but high malaria caseload of ~38,000 cases/month, will likely experience significant pressure on their health systems due to the dual burden of Lassa fever and malaria.\n\n## Situation Assessment\nInterpreting the Lassa fever outbreak trajectory from Week 19 to Week 28, we observe a fluctuating trend. The number of new confirmed cases has varied from 11 to 24, with case fatality rates (CFR) ranging from 0% to 30.8%. The cumulative cases and deaths have generally increased, but the pace of this increase has slowed in recent weeks. Specifically, from Week 19 to Week 23, the cumulative cases increased from 5,034 to 5,652, and from Week 23 to Week 28, the cumulative cases decreased to 811, indicating a potential decline in the outbreak's momentum. However, the CFR has remained significant, with a recent increase to 18.7% in Week 28. This suggests that while the outbreak might be plateauing, it still poses a considerable risk, particularly in the most-affected states. Over the next 2-4 weeks from 2026-07-02, we anticipate a continued, albeit potentially slower, increase in cases, necessitating sustained vigilance and response efforts.\n\n## Priority States & Resource Allocation\nBased on the most recent data, we recommend the following ranked allocation of response resources:\n- **Bauchi**: Given its high and rising malaria caseload (~62,000 to ~92,664 cases/month) and significant Lassa fever burden, Bauchi should receive top priority for case-management teams, lab/diagnostic capacity enhancement, and ribavirin allocation.\n- **Edo**: With a stable but high malaria caseload (~38,000 cases/month) and ongoing Lassa fever transmission, Edo should be the second priority for resource allocation, focusing on reinforcing diagnostic capacity and ensuring adequate isolation beds.\n- **Ondo, Taraba, and Ebonyi**: These states, also heavily affected by Lassa fever and with rising or significant malaria forecasts, should receive targeted support, including enhanced surveillance, community engagement, and access to therapeutics.\n\n## Cross-Disease Health-System Load\nThe interaction between Lassa fever and malaria in the same states poses significant challenges. Both diseases present with fever, leading to diagnostic confusion and competition for health-system capacity. In Edo, for example, the ~38,000 confirmed malaria cases/month, alongside the Lassa fever surge, will strain diagnostic facilities and clinical management resources. Similarly, Bauchi's rising malaria caseload (~62,000 to ~92,664 cases/month) compounds the challenge posed by Lassa fever, necessitating careful resource allocation and disease management strategies to avoid overwhelming the health system. The weather-driven co-risk of malaria further complicates the situation, as elevated rainfall and optimal temperatures for mosquito breeding will increase malaria transmission, adding to the overall health-system load.\n\n## Recommended Interventions (Sequenced)\n1. **Immediate (0-2 weeks)**: Enhance diagnostic capacity in priority states (Bauchi, Edo) to reduce diagnostic confusion between Lassa fever and malaria. Deploy additional case-management teams and ensure adequate supplies of ribavirin and personal protective equipment (PPE).\n2. **2-week horizon**: Implement targeted community awareness campaigns in all affected states to improve recognition of Lassa fever symptoms and promote preventive measures. Enhance surveillance and contact tracing to identify and manage potential outbreaks early.\n3. **6-week horizon**: Conduct a comprehensive review of the health system's capacity in the most-affected states, focusing on areas such as laboratory capacity, isolation bed availability, and healthcare worker training. Implement measures to strengthen these areas, including training programs for healthcare workers on Lassa fever and malaria case management.\n\n## Monitoring & Triggers\nWe define the following numeric triggers for escalating or de-escalating the response:\n- **Escalation**: If weekly confirmed Lassa fever cases exceed 20 in any single state, or if the CFR rises above 20% in the overall outbreak.\n- **De-escalation**: If weekly confirmed cases drop below 10 for two consecutive weeks in all states, or if the CFR decreases to below 10% for two consecutive weeks.\nThese triggers will guide the dynamic adjustment of response efforts, ensuring that resources are allocated effectively based on the evolving outbreak situation.",
+    "weather": {
+      "location_used": "Abuja",
+      "as_of": "2026-07-02",
+      "temperature_c": 26.6,
+      "humidity_pct": 77,
+      "rainfall_today_mm": 0.0,
+      "rainfall_7day_mm": 39.8,
+      "rainfall_forecast_7day_mm": 32.2,
+      "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); the 7-day rainfall FORECAST (~32mm) points to continued/increasing mosquito-breeding conditions in the days ahead; temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+    },
+    "latest_summary": "The Executive Secretary of the Tertiary Education Trust Fund (TETFund) has challenged Nigerian scientists to develop the country's first Lassa fever vaccine, citing the recurring disease as a major public health burden. The challenge comes after a TETFund-sponsored research project on Lassa fever found that Nigeria remains the country with the highest burden of Lassa fever globally, recording between 5,000 and 10,000 deaths annually.",
+    "trajectory": [
+      {
+        "epi_week": 19.0,
+        "confirmed_this_week": 17.0,
+        "deaths_this_week": 1.0,
+        "cfr_pct": 25.7,
+        "cumulative_confirmed": 5034.0,
+        "cumulative_deaths": 204.0,
+        "states_affected": 23.0,
+        "lgas_affected": 108.0,
+        "top_states": [
+          "Bauchi",
+          "Ondo",
+          "Taraba",
+          "Edo",
+          "Benue"
+        ],
+        "published_at": "2026-05-09T00:00:00+00:00",
+        "link": "https://ncdc.gov.ng/themes/common/files/sitreps/de18cb8cc4f7592536d94bbd70ae4d1e.pdf"
+      },
+      {
+        "epi_week": 20.0,
+        "confirmed_this_week": 24.0,
+        "deaths_this_week": 4.0,
+        "cfr_pct": 16.7,
+        "cumulative_confirmed": 817.0,
+        "cumulative_deaths": 208.0,
+        "states_affected": 23.0,
+        "lgas_affected": 108.0,
+        "top_states": [
+          "Ondo",
+          "Bauchi",
+          "Taraba",
+          "Edo",
+          "Benue"
+        ],
+        "published_at": "2026-05-16T00:00:00+00:00",
+        "link": "https://ncdc.gov.ng/themes/common/files/sitreps/3bdf3756e46ed5e3a21b3a17b01da80a.pdf"
+      },
+      {
+        "epi_week": 21.0,
+        "confirmed_this_week": 11.0,
+        "deaths_this_week": 0.0,
+        "cfr_pct": 0.0,
+        "cumulative_confirmed": 5385.0,
+        "cumulative_deaths": 208.0,
+        "states_affected": 23.0,
+        "lgas_affected": 109.0,
+        "top_states": [
+          "Ondo",
+          "Taraba"
+        ],
+        "published_at": "2026-05-23T00:00:00+00:00",
+        "link": "https://ncdc.gov.ng/themes/common/files/sitreps/ae47ae8c19187e1e6f9faecbad78052c.pdf"
+      },
+      {
+        "epi_week": 22.0,
+        "confirmed_this_week": 13.0,
+        "deaths_this_week": 2.0,
+        "cfr_pct": 24.9,
+        "cumulative_confirmed": 842.0,
+        "cumulative_deaths": 210.0,
+        "states_affected": 23.0,
+        "lgas_affected": 109.0,
+        "top_states": [
+          "Ondo",
+          "Bauchi",
+          "Taraba",
+          "Edo",
+          "Benue"
+        ],
+        "published_at": "2026-05-30T00:00:00+00:00",
+        "link": "https://ncdc.gov.ng/themes/common/files/sitreps/cdb2eb8acf8dbf93a9a17b597f8da884.pdf"
+      },
+      {
+        "epi_week": 23.0,
+        "confirmed_this_week": 13.0,
+        "deaths_this_week": 4.0,
+        "cfr_pct": 30.8,
+        "cumulative_confirmed": 5652.0,
+        "cumulative_deaths": 214.0,
+        "states_affected": 23.0,
+        "lgas_affected": 109.0,
+        "top_states": [
+          "Edo",
+          "Ondo",
+          "Bauchi",
+          "Ebonyi"
+        ],
+        "published_at": "2026-06-06T00:00:00+00:00",
+        "link": "https://ncdc.gov.ng/themes/common/files/sitreps/f44e35aaf1d93099d1ea88cd67ac4144.pdf"
+      },
+      {
+        "epi_week": 28.0,
+        "confirmed_this_week": 11.0,
+        "deaths_this_week": 1.0,
+        "cfr_pct": 18.7,
+        "cumulative_confirmed": 811.0,
+        "cumulative_deaths": 152.0,
+        "states_affected": 21.0,
+        "lgas_affected": 105.0,
+        "top_states": [
+          "Ondo",
+          "Bauchi",
+          "Edo",
+          "Taraba",
+          "Ebonyi"
+        ],
+        "published_at": "2025-07-30T16:01:16",
+        "link": "https://www.premiumtimesng.com/news/top-news/810806-lassa-fever-ondo-records-upward-trend-with-seven-new-cases-one-death.html"
+      }
+    ],
+    "source_label": "Punch HealthWise",
+    "latest_link": "https://healthwise.punchng.com/fast-track-nigerias-first-lassa-fever-vaccine-tetfund-tasks-scientists/",
+    "latest_published_at": "2026-06-30T20:16:49"
+  },
+  {
+    "key": "malaria",
+    "card_type": "signal",
+    "disease": "malaria",
+    "disease_name": "Malaria",
+    "severity": "informational",
+    "geography_level": "state",
+    "location": "Kwara",
+    "report_count": 1,
+    "latest_week": null,
+    "trend": "unknown",
+    "top_states": [],
+    "intervention": "The state government should strengthen collaboration with policymakers, development partners, and stakeholders to eliminate malaria, with a focus on environmental management and complementing other preventive measures.",
+    "source": {
+      "source_label": "Punch HealthWise",
+      "latest_link": "https://healthwise.punchng.com/kwara-cuts-malaria-by-half-blames-sanitation-for-60-of-cases/",
+      "latest_published_at": "2026-06-30T20:14:19",
+      "latest_summary": "Kwara State has reduced malaria prevalence by half, from 26% to 13%, but still accounts for 60% of malaria transmission due to poor environmental sanitation.",
+      "trajectory": []
+    },
+    "our_data": {},
+    "forecast": {
+      "weather": {
+        "location_used": "Rivers",
+        "as_of": "2026-07-02",
+        "temperature_c": 26.4,
+        "humidity_pct": 85,
+        "rainfall_today_mm": 0.1,
+        "rainfall_7day_mm": 64.2,
+        "rainfall_forecast_7day_mm": 46.4,
+        "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); the 7-day rainfall FORECAST (~46mm) points to continued/increasing mosquito-breeding conditions in the days ahead; temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+      },
+      "malaria": {}
+    },
+    "cross_disease_correlation": null,
+    "plan": "## What we know\nKwara State has reportedly reduced malaria prevalence from 26% to 13%. The state still accounts for 60% of malaria transmission, attributed to poor environmental sanitation. Recent weather conditions, with elevated rainfall and high humidity, favor mosquito breeding.\n\n## Why it matters\nThe continued high transmission rate in Kwara State poses a significant public health concern, especially with favorable weather conditions for mosquito breeding. The current weather may also increase the risk of flood/water contamination, potentially leading to other diseases like cholera.\n\n## Recommended early actions\n* Verify the report with the Kwara State epidemiologist to confirm the reduced malaria prevalence and transmission rates.\n* Enhance surveillance in Kwara State to monitor malaria cases and potential outbreaks.\n* Pre-position commodities, such as RDTs and antimalarials, in case of increased demand.\n* Collaborate with state authorities to address poor environmental sanitation and mitigate the risk of flood/water contamination.",
+    "weather": {
+      "location_used": "Rivers",
+      "as_of": "2026-07-02",
+      "temperature_c": 26.4,
+      "humidity_pct": 85,
+      "rainfall_today_mm": 0.1,
+      "rainfall_7day_mm": 64.2,
+      "rainfall_forecast_7day_mm": 46.4,
+      "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); the 7-day rainfall FORECAST (~46mm) points to continued/increasing mosquito-breeding conditions in the days ahead; temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+    },
+    "latest_summary": "Kwara State has reduced malaria prevalence by half, from 26% to 13%, but still accounts for 60% of malaria transmission due to poor environmental sanitation.",
+    "trajectory": [],
+    "source_label": "Punch HealthWise",
+    "latest_link": "https://healthwise.punchng.com/kwara-cuts-malaria-by-half-blames-sanitation-for-60-of-cases/",
+    "latest_published_at": "2026-06-30T20:14:19"
+  },
+  {
+    "key": "other:diarrhoea",
+    "card_type": "signal",
+    "disease": "other",
+    "disease_name": "Diarrhoea",
+    "severity": "informational",
+    "geography_level": "state",
+    "location": "Kaduna",
+    "report_count": 1,
+    "latest_week": null,
+    "trend": "unknown",
+    "top_states": [],
+    "intervention": "The Kaduna State Government recommends the following preventive measures: hand washing, use of alcohol-based sanitizers, safe drinking water, and food safely. Students or staff with diarrhoea or vomiting should stay home until at least 48 hours after symptoms resolve. Residents should ensure water for drinking is boiled, chlorinated, or treated appropriately, and cook food thoroughly, especially meats, eggs, and vegetables.",
+    "source": {
+      "source_label": "Premium Times (Health Desk)",
+      "latest_link": "https://www.premiumtimesng.com/news/more-news/805626-diarrhoea-outbreak-15-girls-discharged-from-hospital-official.html",
+      "latest_published_at": "2025-07-07T14:37:18",
+      "latest_summary": "A diarrhoea outbreak affected 81 students at the Government Girls Senior and Junior Secondary School, Kawo, Kaduna. 15 students were hospitalized, but all have since recovered and been discharged. The Kaduna State Government has recommended preventive measures to prevent future occurrences.",
+      "trajectory": []
+    },
+    "our_data": {},
+    "forecast": {
+      "weather": {
+        "location_used": "Kaduna",
+        "as_of": "2026-07-02",
+        "temperature_c": 27.5,
+        "humidity_pct": 72,
+        "rainfall_today_mm": 0.0,
+        "rainfall_7day_mm": 51.7,
+        "rainfall_forecast_7day_mm": 9.5,
+        "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+      },
+      "malaria": {}
+    },
+    "cross_disease_correlation": null,
+    "plan": "## What we know\nA diarrhoea outbreak reportedly affected 81 students at the Government Girls Senior and Junior Secondary School, Kawo, Kaduna. 15 students were hospitalized but have since recovered. The Kaduna State Government has recommended preventive measures.\n\n## Why it matters\nThis outbreak is significant as it may indicate a larger public health issue in Kaduna. The current weather conditions, with elevated rainfall and high humidity, increase the risk of water contamination and mosquito breeding, which could lead to other diseases like cholera and malaria.\n\n## Recommended early actions\n* Verify the outbreak with the Kaduna State epidemiologist\n* Conduct heightened surveillance for diarrhoea cases in the area\n* Prepare for potential lab confirmation and commodity pre-positioning\n* Review recent malaria data, given the favorable weather conditions for mosquito breeding and parasite development",
+    "weather": {
+      "location_used": "Kaduna",
+      "as_of": "2026-07-02",
+      "temperature_c": 27.5,
+      "humidity_pct": 72,
+      "rainfall_today_mm": 0.0,
+      "rainfall_7day_mm": 51.7,
+      "rainfall_forecast_7day_mm": 9.5,
+      "note": "recent 7-day rainfall is elevated -- conditions favor mosquito breeding (malaria) and may increase flood/water contamination risk (cholera); temperature is in the optimal range for malaria parasite development in mosquitoes; high humidity further supports mosquito survival/breeding"
+    },
+    "latest_summary": "A diarrhoea outbreak affected 81 students at the Government Girls Senior and Junior Secondary School, Kawo, Kaduna. 15 students were hospitalized, but all have since recovered and been discharged. The Kaduna State Government has recommended preventive measures to prevent future occurrences.",
+    "trajectory": [],
+    "source_label": "Premium Times (Health Desk)",
+    "latest_link": "https://www.premiumtimesng.com/news/more-news/805626-diarrhoea-outbreak-15-girls-discharged-from-hospital-official.html",
+    "latest_published_at": "2025-07-07T14:37:18"
+  }
+]

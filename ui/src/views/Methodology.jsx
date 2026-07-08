@@ -112,6 +112,137 @@ export default function Methodology({ data, variant = 'after' }) {
         </div>
       </Card>
 
+      <Card title="Burden score, hotspot zones &amp; the Mechanistic model — full justification"
+        sub="Why each parameter is in the score, why it's weighted the way it is, and exactly where every number comes from"
+        style={{ marginTop: 18 }}>
+        <div className="method-section">
+          <h4>Facility-level burden (4 factors, 0–100)</h4>
+          <p>Each factor was chosen because it answers a DIFFERENT question a health officer actually asks about a
+            facility, and together they can't be gamed by improving just one number:</p>
+          <ul>
+            <li><b>Case volume (45%)</b> — "how big is the problem here at all?" Log-scaled against the national P99
+              (~865 confirmed cases/month) so one outlier facility doesn't compress everyone else near zero. Given the
+              highest weight because raw caseload is the single strongest predictor of where limited commodities
+              (RDTs, ACTs, nets) should physically go this month.</li>
+            <li><b>Testing gap (25%)</b> — "are we even finding the cases that exist?" Built from <code>Fever Testing
+              Rate</code> (DHIS2), the share of fever presentations actually given a parasitological test. This
+              REPLACED test-positivity (confirmed ÷ RDT tested) after your review flagged it as reading too high
+              almost everywhere: clinicians mostly test patients they already suspect have malaria, so positivity
+              clusters near 90–100% at most facilities and stops discriminating between them. Testing gap doesn't
+              saturate the same way and captures a genuinely different, actionable risk — facilities that under-test
+              are the ones most likely to be missing or mistreating real cases.</li>
+            <li><b>Treatment gap (18%)</b> — "of the cases we found, how many actually got treated?" Confirmed cases
+              minus ACT courses given, as a share of confirmed cases. A facility can have low volume and good testing
+              but still fail patients here if ACT stock runs out.</li>
+            <li><b>Diagnostic gap (12%)</b> — "how much of what we're reporting is even confirmed?" Presumed
+              (clinically-diagnosed, unconfirmed) share of total reported cases. Lowest weight because it's the most
+              downstream of the four — a symptom of the testing gap above, kept separate only because DHIS2 reports it
+              as its own number and a large gap here specifically flags over-reliance on clinical diagnosis.</li>
+          </ul>
+          <p>LLIN/net distribution was considered but excluded — it's reported in only ~4% of facility-month rows,
+            too sparse to score reliably without effectively guessing for 96% of facilities.</p>
+        </div>
+        <div className="method-section">
+          <h4>LGA/state-level burden (10 factors, rank-blended)</h4>
+          <p>The map's own score blends four groups — <b>A) disease load</b> (case volume + trend, 35%),
+            <b> B) transmission signal</b> (RDT positivity + treatment gap, 25%), <b>C) weather</b> (rainfall,
+            temperature vs the 27°C optimum, humidity, 20%), and <b>D) protection gaps</b> (net gap, IRS gap, IPT gap,
+            20%) — then blends the raw 0–100 score with each area's PERCENTILE RANK against its peers (60% rank / 40%
+            raw). The rank component exists so "high burden" always means something relative to the rest of Nigeria,
+            not just relative to an arbitrary fixed scale.</p>
+        </div>
+        <div className="method-section">
+          <h4>Hotspot zone thresholds — why they were raised</h4>
+          <p>Zones are <b>Not a Hotspot 0–59 · Green 60–70 · Yellow 71–80 · Amber 81–90 · Red 91–100</b> (previously
+            0–18/38/58/78, a far lower bar). The old thresholds had a hidden problem: the rank-blend above gives EVERY
+            area a rank-based floor just from being ranked at all (the median area sits at rank_pct≈0.5, contributing
+            ~30 points from rank alone before its raw severity is even considered) — so under the old &lt;18 cutoff
+            for "Not a Hotspot," most LGAs cleared that bar by default and the map read as almost entirely colour,
+            regardless of whether transmission was actually elevated. Raising the floor to 60 means an area now needs
+            genuinely high combined rank+severity to earn ANY hotspot colour — a below-median area cannot cross into
+            Green by rank alone, so the map goes back to showing WHERE the real problem areas are instead of shading
+            the whole country.</p>
+        </div>
+        <div className="method-section">
+          <h4>Why nothing reached Red at first, and exactly how that was fixed</h4>
+          <p>Raising the thresholds (above) exposed a SECOND, separate problem: with real national data loaded, the
+            single worst STATE in the country topped out at a display score of <b>85.4</b> (Amber) — nothing ever
+            reached 91+, no matter how severe. Checking the maths directly against the live data showed why: the
+            raw 0–100 formula has a theoretical ceiling of 100, but two of its ten factors are effectively CONSTANT in
+            practice — RDT-positivity defaults to a fixed 0.55 nationwide (positive-test counts aren't collected at
+            all, flagged via <code>flags.no_rdt_pos</code>) and the IRS-gap factor is hard-fixed at 1.0 (no IRS data
+            exists at all) — so the REAL achievable raw score across all 37 states only ever spanned <b>38.6 to
+            63.6</b>, a 25-point band nowhere near the formula's theoretical 100. Blending that narrow, compressed raw
+            score with the rank term (which DOES span the full 0–100 by construction) meant the raw component could
+            never contribute enough for the worst real state to clear 91, however severe it genuinely was.</p>
+          <p><b>The fix:</b> instead of feeding <code>raw ÷ 100</code> directly into the blend, the raw score is now
+            MIN-MAX NORMALISED against the actual range observed nationally that month
+            (<code>(raw − national_min) ÷ (national_max − national_min)</code>) before blending. This doesn't change
+            what's being measured — the same 10 weighted factors, the same 60/40 rank/raw blend — it only rescales the
+            raw component to use the range that's ACTUALLY achieved in practice, so the single worst area nationally
+            reaches close to 100 (Red) instead of capping out around 85 (Amber) purely because of the formula's
+            unreachable theoretical ceiling. Re-checked against the live warehouse data after the fix: state-level, the
+            worst state (Abia, raw 63.6, ranked #1) now scores <b>85.4 → 100</b>; LGA-level, across all 774 LGAs
+            nationally the distribution became <b>6 Red · 48 Amber · 64 Yellow · 105 Green · 551 Not a Hotspot</b> —
+            genuine reds for the worst areas, while the majority (551 of 774) correctly stay unflagged.</p>
+          <p><b>Critical detail — this normalisation is always computed against the FULL NATIONAL set, never the
+            current view.</b> When you drill into one state, its LGAs are still compared against all 774 LGAs
+            nationally, not just that state's own ~10–30 LGAs. Without this, a genuinely low-burden state's single
+            least-bad LGA could look like the worst in the country purely from being the top of a small, mild peer
+            group — the exact same class of bug the FACILITY-level score was fixed for earlier this session
+            (facilities were briefly ranked only against their own LGA's peers, making outlier facilities in
+            low-burden LGAs look artificially severe). The peer-average used in the case-volume factor is computed
+            the same way, for the same reason: always the national LGA average, never re-baselined per state.</p>
+          <p><b>Facility-level scoring needed a different fix, for a different reason.</b> Facility burden is
+            deliberately an ABSOLUTE score (not rank-based at all — see the facility-burden section above), so the
+            same rank/raw blend fix doesn't apply. Sampling 671 real facilities across the six highest-burden LGAs in
+            the country (Kaduna North, Alimosho, Umunneochi, Bindawa, Takai, Abuja Municipal — chosen BECAUSE they're
+            the worst LGAs nationally, so this sample is already biased toward the worst facilities in Nigeria, not a
+            random draw) found the single worst facility in the country scored only <b>86.9</b> raw — still short of
+            91+ — because in practice most facilities test and treat reasonably well even when case volume is high,
+            so the testing/treatment/diagnostic-gap factors rarely all max out simultaneously the way the formula's
+            theoretical ceiling assumes. The fix is a fixed empirical stretch constant
+            (<code>100 ÷ 87 ≈ 1.15</code>, derived directly from that sample's observed ceiling), applied to every
+            facility's raw score everywhere — NOT a per-LGA or per-request recalculation, so the score stays
+            absolute and comparable nationwide, exactly as originally designed. Re-checked after the fix: the same
+            671-facility sample now distributes as <b>1 Red · 8 Yellow · 61 Green · 601 Not a Hotspot</b>, with the
+            single genuinely worst facility in the sample correctly reaching 99.9.</p>
+        </div>
+        <div className="method-section">
+          <h4>Mechanistic (Ross-Macdonald) What-If parameters — what's real vs. derived vs. illustrative</h4>
+          <p>Every parameter in the Mechanistic panel is tagged with exactly where it comes from (visible in the
+            panel's own "Location context" table and API response), because a government audience specifically needs
+            to know which numbers are measured and which are estimated:</p>
+          <ul>
+            <li><b>Measured (warehouse-sourced, used as-is):</b> population, population density, PfPR (parasite rate),
+              rainfall, temperature, NDVI, poverty (MPI headcount %), education deprivation (literacy proxy), IPTp
+              coverage (via "% of all Antenatal care clients receiving malaria IPT" — the DHIS2 "IPTp1 Coverage"
+              indicator itself was found to be corrupted at source, ~46% of rows exceeding 100% with values up to
+              1e8%, so this cleaner proxy indicator is used instead), and RDT testing volume.</li>
+            <li><b>Derived from real data via a standard demographic ratio (NOT this location's own measurement,
+              because Nigeria does not publish per-LGA figures for these):</b> pregnant-women population
+              (population × 4.4%, consistent with national crude birth rate) and under-5 population (population ×
+              17.5%, UN World Population Prospects Nigeria age structure) — both applied to this LGA's REAL population
+              figure, so the population itself is real even though the age/condition split is a standard ratio.
+              "Infected population" is derived the same way, as population × PfPR — a prevalence-based estimate, not
+              a case count.</li>
+            <li><b>Illustrative (no source data exists at all, literature/policy defaults used as a starting point
+              only):</b> IRS coverage (~8% national baseline — IRS campaigns are localised and no per-LGA coverage is
+              published) and vaccine/child-immunisation coverage (~31% national baseline, NDHS-consistent). Both are
+              clearly labelled as such and fully user-adjustable — they are starting POINTS for a scenario, not
+              claims about this specific LGA.</li>
+          </ul>
+          <p>Two further modelling choices, both driven by real data: <b>population density</b> feeds the model as a
+            bounded dilution factor on vector-to-host ratio (denser settlements dilute the same mosquito population
+            over more people — the standard explanation for why urban malaria transmission tends to run lower than
+            rural at equal rainfall), and the <b>socioeconomic vulnerability index</b> (average of poverty + education
+            deprivation) discounts nominal ACT coverage into an EFFECTIVE coverage — a poorer, less literate area
+            converts the same nominal treatment coverage into less complete treatment-seeking behaviour in practice.
+            IPTp and vaccine coverage are deliberately audience-scoped (to pregnant women and under-5s respectively)
+            rather than applied population-wide, because that's what they actually are clinically.</p>
+        </div>
+      </Card>
+
       <Card title="Full technical deep-dive — everything done, end to end"
         sub="The complete, auditable record of the data handling, feature forecasting, prediction and validation"
         style={{ marginTop: 18 }}>
