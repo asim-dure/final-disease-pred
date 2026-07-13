@@ -34,6 +34,7 @@ Malaria is fully supported; other diseases return available:false with a reason 
 the UI degrades honestly rather than breaking.
 """
 import os
+import json
 import time
 import logging
 
@@ -43,6 +44,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 from dotenv import load_dotenv
+
+import warehouse as wh
 
 log = logging.getLogger("facility_api")
 facility_router = APIRouter()
@@ -297,6 +300,288 @@ _SCORING_METHOD_NOTE = (
 )
 
 
+# ── HIV facility drill-down ─────────────────────────────────────────────────
+# Unlike malaria, no local facility-grain snapshot exists for HIV (that
+# pipeline -- build_facility_index.py -- was built from a raw DHIS2 malaria
+# export file that has no HIV equivalent), so this queries
+# public.fact_indicator_data_hiv LIVE, per (state, LGA), on first open --
+# same tradeoff malaria had before its snapshot existed (that table has the
+# same missing geo_admin_location_key/indicator_key index), just accepted
+# here rather than built around, since verified live this is single-digit
+# seconds for one LGA's worth of rows (not malaria's 70-90s full-table
+# scan), and the existing in-process cache (_FACILITY_CACHE) already makes
+# every repeat open instant regardless.
+#
+# NDARS (system_id=7) ONLY, per the standing constraint for all HIV data in
+# this build. Facility identity comes from dim_geo_location_master's
+# location_name (== geo_admin_level7_name at admin_level=7) -- NOT
+# geo_admin_level4_name, which is the WARD, a common mistake given malaria's
+# own facility_malaria.parquet snapshot exposes a flat "facility" column
+# that obscures this distinction.
+#
+# Facility score reuses the EXACT SAME 5-factor formula as the map/dashboard
+# (ui/src/hivBurdenScore.js's hivScoreDetail), ported to Python, minus the
+# population-density factor (not meaningful at facility grain) -- its 10
+# points are redistributed proportionally across the other four so they
+# still sum to 100. Unlike malaria's nationally-calibrated absolute score
+# (which took sampling 671 real facilities to calibrate honestly), this is
+# scored against the facility's OWN LGA peers (facilities within the same
+# LGA), disclosed as such in _HIV_SOURCE_META -- no equivalent national
+# facility-level calibration exists for HIV yet.
+_HIV_MIN_YEAR = 2023  # matches export_burden_hiv.py's own real-data-window restriction
+_HIV_IND = {
+    "hts_tested": ["HTS Monthly_1n_HTS_TST Total, Male", "HTS Monthly_1n_HTS_TST Total, Female"],
+    "hts_pos": ["HTS Monthly_1n_HTS_TST_POS Total, Male", "HTS Monthly_1n_HTS_TST_POS Total, Female"],
+    "art_curr": ["ART Monthly_3_Currently on ART Female", "ART Monthly_3_Currently on ART Male\xa0"],
+    "art_vl_tested": ["ART Monthly_6a_Currently on ART with VL result Female", "ART Monthly_6a_Currently on ART with VL result Male"],
+}
+# min forecastable-facility bar: at least this many real non-zero
+# hts_tested-or-hts_pos months within the trailing window, so a facility
+# that reported once in passing isn't shown as if it had a real trend --
+# directly per the "only show facilities available for forecast" request.
+_HIV_FORECASTABLE_MIN_MONTHS = 6
+
+_HIV_FACTOR_META = {
+    "case_burden": {
+        "weight": 34.0, "label": "Case burden (positivity)", "indicator": "HTS_TST_POS ÷ HTS_TST (this facility vs its LGA peers)",
+        "help": "This facility's HIV-positive share of tests, relative to the average positivity rate across facilities in the same LGA.",
+        "why_weight": "Weighted highest -- the direct signal of where positive diagnoses are concentrated, same role it plays in the state/national map.",
+    },
+    "testing_gap": {
+        "weight": 22.0, "label": "Testing gap", "indicator": "HTS_TST Total (this facility vs its LGA peers)",
+        "help": "How far this facility's testing volume falls short of its LGA peers'.",
+        "why_weight": "Under-testing is the biggest driver of missed diagnoses after case burden itself.",
+    },
+    "art_gap": {
+        "weight": 22.0, "label": "ART coverage gap", "indicator": "ART Monthly_3 Currently on ART (this facility vs its LGA peers)",
+        "help": "How far this facility's ART coverage falls short of its LGA peers'.",
+        "why_weight": "WHO/UNAIDS Treatment-as-Prevention -- a facility whose ART coverage lags its peers is a priority for treatment scale-up.",
+    },
+    "vl_gap": {
+        "weight": 22.0, "label": "VL-monitoring gap", "indicator": "ART Monthly_6a Currently on ART with VL result ÷ Currently on ART",
+        "help": "Share of this facility's own ART patients NOT getting a routine viral-load check -- self-contained, no LGA peer needed.",
+        "why_weight": "Routine VL monitoring catches treatment failure before it becomes a transmission risk again.",
+    },
+}
+_HIV_SCORING_METHOD_NOTE = (
+    "Scored against this facility's OWN LGA peers (facilities reporting in the same LGA), not a "
+    "nationally-calibrated absolute scale -- unlike malaria's facility score (calibrated by sampling "
+    "671 real facilities nationally), no equivalent national HIV facility-level calibration exists yet, "
+    "so this is disclosed as LGA-relative rather than presented as a false absolute. Population-density "
+    "(a factor in the state/national map) is dropped at facility grain -- not meaningful at this scale -- "
+    "and its 10 points are redistributed proportionally across the other four factors."
+)
+_HIV_SOURCE_META = {
+    "warehouse_table": "public.fact_indicator_data_hiv (LIVE query, system_id=7 / NDARS only)",
+    "geo_table": "public.dim_geo_location_master",
+    "indicator_table": "public.dim_indicator_master",
+    "grain": "admin_level = 7 (health facility)",
+    "min_year": _HIV_MIN_YEAR,
+    "query_mode": f"Live warehouse read per (state, LGA) on first open -- no local snapshot exists for HIV "
+                   f"(unlike malaria's facility_malaria.parquet). Cached in-process for up to "
+                   f"{_FACILITY_CACHE_TTL // 3600}h per (state, LGA) after that, so repeat opens are instant.",
+    "indicators": [{"name": " + ".join(v), "role": k} for k, v in _HIV_IND.items()],
+}
+
+_HIV_BURDEN_RICH_PATH = os.path.join(_HERE, "ui", "public", "data", "after", "hiv", "burden_rich.json")
+_HIV_BURDEN_RICH: dict | None = None
+
+
+def _hiv_burden_rich() -> dict | None:
+    global _HIV_BURDEN_RICH
+    if _HIV_BURDEN_RICH is None:
+        try:
+            with open(_HIV_BURDEN_RICH_PATH, encoding="utf-8") as f:
+                _HIV_BURDEN_RICH = json.load(f)
+        except Exception as e:
+            log.warning(f"burden_rich.json unavailable: {e}")
+            _HIV_BURDEN_RICH = False
+    return _HIV_BURDEN_RICH if _HIV_BURDEN_RICH is not False else None
+
+
+def _fetch_hiv_facility_rows(state: str, lga: str) -> pd.DataFrame:
+    """LIVE facility-grain fetch for one LGA -- see module note above for why
+    this isn't a cached local snapshot. Returns long-format rows: one row per
+    (facility, field, year, month)."""
+    names = [n for names in _HIV_IND.values() for n in names]
+    sql = """
+        select g.location_name as facility, im.indicator_name, f.year, f.month, f.indicator_value
+        from public.fact_indicator_data_hiv f
+        join public.dim_geo_location_master g on g.geo_admin_location_key = f.geo_admin_location_key
+        join public.dim_indicator_master im on im.indicator_key = f.indicator_key
+        where g.geo_admin_level2_name = :state and g.geo_admin_level3_name = :lga
+          and g.admin_level = 7 and f.system_id = 7
+          and im.indicator_name = ANY(:names) and f.year >= :min_year
+          and g.location_name is not null
+    """
+    df = wh.safe_select(sql, {"state": state, "lga": lga, "names": names, "min_year": _HIV_MIN_YEAR})
+    if df.empty:
+        return df
+    name_to_field = {n: field for field, names in _HIV_IND.items() for n in names}
+    df["field"] = df["indicator_name"].map(name_to_field)
+    df["ym"] = df["year"].astype(int).astype(str) + "-" + df["month"].astype(int).astype(str).str.zfill(2)
+    df["indicator_value"] = pd.to_numeric(df["indicator_value"], errors="coerce").fillna(0.0)
+    return df
+
+
+def _hiv_lga_series(state: str, lga: str) -> tuple[list[dict], int | None]:
+    """The LGA's own real+forecast hts_pos monthly series, straight from
+    burden_rich.json (the SAME file the map/dashboard reads) -- reused here,
+    not recomputed, so the facility forecast tail always sums to exactly
+    what the map already shows for this LGA. Returns (months_used, last_real_ym_index)."""
+    br = _hiv_burden_rich()
+    if br is None:
+        return [], None
+    key = f"{state}|||{lga}"
+    lg = br.get("lgas", {}).get(key)
+    months = br.get("months", [])
+    if not lg or not months:
+        return [], None
+    out = []
+    last_real_i = None
+    for i, m in enumerate(months):
+        v = lg.get("hts_pos", [None] * len(months))[i] if i < len(lg.get("hts_pos", [])) else None
+        out.append({"ym": m["ym"], "label": m["label"], "forecast": m["forecast"], "cases": v})
+        if not m["forecast"]:
+            last_real_i = i
+    return out, last_real_i
+
+
+def _hiv_fac_score(x: dict, peer: dict) -> tuple[float, dict]:
+    """Direct Python port of hivScoreDetail's formula (ui/src/hivBurdenScore.js),
+    minus the density factor (not meaningful at facility grain -- see module
+    note). x/peer: {hts_tested, hts_pos, art_curr, art_vl_tested}."""
+    def cl(v, lo=0.0, hi=1.0):
+        return min(hi, max(lo, v))
+    hts_tested = x.get("hts_tested") or 0.0
+    hts_pos = x.get("hts_pos") or 0.0
+    art_curr = x.get("art_curr") or 0.0
+    art_vl = x.get("art_vl_tested") or 0.0
+    p_tested = peer.get("hts_tested") or 0.0
+    p_pos = peer.get("hts_pos") or 0.0
+    p_art = peer.get("art_curr") or 0.0
+
+    case_burden = cl(hts_pos / (p_pos * 2.5)) if p_pos > 0 else (1.0 if hts_pos > 0 else 0.0)
+    testing_gap = cl(1.0 - hts_tested / p_tested) if p_tested > 0 else 0.3
+    art_gap = cl(1.0 - art_curr / p_art) if p_art > 0 else 0.3
+    vl_gap = cl(1.0 - art_vl / art_curr) if art_curr > 0 else 0.5
+
+    comps = [("case_burden", 34.0, case_burden), ("testing_gap", 22.0, testing_gap),
+             ("art_gap", 22.0, art_gap), ("vl_gap", 22.0, vl_gap)]
+    W = sum(w for _, w, _ in comps)
+    raw = min(100.0, 100.0 * sum(w * s for _, w, s in comps) / W)
+    factors = {name: {"sub": round(s, 3), "points": round(100.0 * w * s / W, 1), "weight": round(w, 1)} for name, w, s in comps}
+    return round(raw, 1), factors
+
+
+def _build_hiv_facility_response(state: str, lga: str) -> dict:
+    empty = {"available": True, "disease": "hiv", "state": state, "lga": lga,
+             "n_facilities": 0, "months": [], "facilities": [], "lga_cases": [],
+             "factor_meta": _HIV_FACTOR_META, "source": _HIV_SOURCE_META, "scoring_method_note": _HIV_SCORING_METHOD_NOTE}
+    rows = _fetch_hiv_facility_rows(state, lga)
+    if rows.empty:
+        return empty
+
+    def lookup(field):
+        sub = rows[rows["field"] == field]
+        if sub.empty:
+            return pd.Series(dtype=float)
+        return sub.groupby(["facility", "ym"])["indicator_value"].sum()
+
+    series_by_field = {f: lookup(f) for f in _HIV_IND}
+    all_facilities = sorted(rows["facility"].dropna().unique())
+    all_yms = sorted(rows["ym"].unique())
+
+    # forecastable-only filter -- at least N real non-zero hts_tested-or-hts_pos
+    # months, per the explicit "only show facilities available for forecast" request.
+    tested_s, pos_s = series_by_field["hts_tested"], series_by_field["hts_pos"]
+    def n_real_months(fac):
+        return sum(1 for ym in all_yms if (tested_s.get((fac, ym), 0) or 0) > 0 or (pos_s.get((fac, ym), 0) or 0) > 0)
+    facilities = [f for f in all_facilities if n_real_months(f) >= _HIV_FORECASTABLE_MIN_MONTHS]
+    if not facilities:
+        return empty
+
+    actual_yms = sorted([ym for ym in all_yms if (tested_s.groupby(level="ym").sum().get(ym, 0) or 0) > 0])[-_ACTUAL_WINDOW:]
+    if not actual_yms:
+        return empty
+    last_real = actual_yms[-1]
+    last12 = actual_yms[-12:]
+
+    def sum12(s, fac):
+        return sum(float(s.get((fac, ym), 0) or 0) for ym in last12)
+
+    trailing = {fac: {f: sum12(series_by_field[f], fac) for f in _HIV_IND} for fac in facilities}
+    denom_pos = sum(t["hts_pos"] for t in trailing.values()) or 1.0
+    share = {fac: trailing[fac]["hts_pos"] / denom_pos for fac in facilities}
+
+    # LGA peer average (facility-level trailing totals, averaged across this
+    # LGA's own forecastable facilities) -- the reference every facility in
+    # THIS LGA is compared against (see module note: LGA-relative, not a
+    # nationally-calibrated absolute scale).
+    peer = {f: (sum(trailing[fac][f] for fac in facilities) / len(facilities)) for f in _HIV_IND}
+
+    lga_yms, _ = _hiv_lga_series(state, lga)
+    fc_yms = [m["ym"] for m in lga_yms if m["forecast"]]
+    # Per explicit request: only show facilities that have BOTH real data AND
+    # forecast data. The forecast tail is disaggregated from this LGA's own
+    # burden_rich.json series (see _hiv_lga_series) -- if that lookup comes
+    # back empty (most likely an LGA-name mismatch between
+    # dim_geo_location_master and burden_rich.json's own state/lga naming,
+    # the same class of spelling mismatch ../lgaAlias.js exists to reconcile
+    # for the map), every facility in this LGA would otherwise be shown with
+    # real data but silently NO forecast tail -- an honest gap, not something
+    # to paper over by showing them anyway.
+    if not fc_yms:
+        return {**empty, "note": f"Real facility-level HIV data exists for {lga}, but no LGA-level "
+                                  f"forecast is available for it in this build, so no facility can meet "
+                                  f"the \"real data AND forecast data\" bar. Not shown rather than shown "
+                                  f"with a missing forecast."}
+    lga_fc = {m["ym"]: (m["cases"] or 0.0) for m in lga_yms if m["forecast"]}
+    fc_set = set(fc_yms)
+    yms = actual_yms + fc_yms
+
+    out_fac = []
+    for fac in facilities:
+        series = []
+        for ym in yms:
+            forecast = ym in fc_set
+            if forecast:
+                c = share.get(fac, 0.0) * lga_fc.get(ym, 0.0)
+                x = {"hts_tested": trailing[fac]["hts_tested"] / 12.0, "hts_pos": c,
+                     "art_curr": trailing[fac]["art_curr"] / 12.0, "art_vl_tested": trailing[fac]["art_vl_tested"] / 12.0}
+            else:
+                c = pos_s.get((fac, ym))
+                x = {f: series_by_field[f].get((fac, ym), 0.0) for f in _HIV_IND}
+            pt = {"ym": ym, "label": _label(ym), "forecast": forecast, "cases": None if c is None else round(c)}
+            if c is not None and c >= 0:
+                b, fdet = _hiv_fac_score(x, peer)
+                pt.update(burden=b, zone=_zone(b), factors=fdet,
+                          inputs={"hts_tested": _num(x["hts_tested"]), "art_curr": _num(x["art_curr"]),
+                                  "art_vl_tested": _num(x["art_vl_tested"]), "structural": forecast,
+                                  "disagg_share": _num(share.get(fac)) if forecast else None})
+            series.append(pt)
+        latest = next((p for p in reversed(series) if not p["forecast"] and p.get("cases")), None)
+        out_fac.append({"facility": fac, "ward": None, "latest_actual_ym": last_real,
+                        "latest_cases": latest["cases"] if latest else None,
+                        "latest_burden": latest.get("burden") if latest else None,
+                        "context_12m": {"cases": _num(trailing[fac]["hts_pos"]), "hts_tested": _num(trailing[fac]["hts_tested"]),
+                                        "art_curr": _num(trailing[fac]["art_curr"]), "art_vl_tested": _num(trailing[fac]["art_vl_tested"])},
+                        "series": series})
+    out_fac.sort(key=lambda f: (f["latest_burden"] if f["latest_burden"] is not None else -1), reverse=True)
+
+    lga_totals = {ym: 0.0 for ym in yms}
+    for fac_out in out_fac:
+        for pt in fac_out["series"]:
+            if pt["cases"] is not None:
+                lga_totals[pt["ym"]] += pt["cases"]
+    lga_cases = [{"ym": ym, "label": _label(ym), "forecast": ym in fc_set, "cases": round(lga_totals[ym])} for ym in yms]
+    months = [{"ym": ym, "label": _label(ym), "forecast": ym in fc_set} for ym in yms]
+    return {"available": True, "disease": "hiv", "state": state, "lga": lga,
+            "n_facilities": len(facilities), "months": months, "factor_meta": _HIV_FACTOR_META,
+            "facilities": out_fac, "lga_cases": lga_cases, "source": _HIV_SOURCE_META,
+            "scoring_method_note": _HIV_SCORING_METHOD_NOTE}
+
+
 def _num(v):
     try:
         f = float(v)
@@ -343,10 +628,10 @@ def list_facilities(disease: str = "malaria", state: str = "", lga: str = ""):
     """
     if not state or not lga:
         raise HTTPException(400, "state and lga are required")
-    if disease != "malaria":
+    if disease not in ("malaria", "hiv"):
         return {"available": False, "disease": disease, "state": state, "lga": lga,
-                "reason": "Facility-level drill-down is currently available for malaria "
-                          "(the only disease with a facility-grain source loaded). Other "
+                "reason": "Facility-level drill-down is currently available for malaria and HIV "
+                          "(the only diseases with a facility-grain source loaded). Other "
                           "diseases are aggregated at LGA level in this build."}
 
     cache_key = (disease, state, lga)
@@ -355,7 +640,7 @@ def list_facilities(disease: str = "malaria", state: str = "", lga: str = ""):
     if cached and (now - cached[0]) < _FACILITY_CACHE_TTL:
         return cached[1]
 
-    result = _build_facility_response(disease, state, lga)
+    result = _build_hiv_facility_response(state, lga) if disease == "hiv" else _build_facility_response(disease, state, lga)
     _FACILITY_CACHE[cache_key] = (now, result)
     return result
 
@@ -540,17 +825,24 @@ def facility_risk(req: FacilityRiskReq):
     level = _risk_level(req.burden, req.zone)
     projected = round(req.cases) if req.cases is not None else 0
 
+    is_hiv = req.disease == "hiv"
+    metric_label = "new HIV-positive diagnoses" if is_hiv else "confirmed malaria cases"
+    programme = "Nigeria's National AIDS & STIs Control Programme (NASCP)" if is_hiv else "Nigeria's National Malaria Elimination Programme"
+    officer = "an HIV surveillance officer" if is_hiv else "a malaria surveillance officer"
+
     # No projected cases -> nothing to pre-position for. Return an honest,
     # deterministic note instead of billing an LLM call for a boilerplate
     # "prepare for 0 cases" brief (the UI also hides the button in this case).
     if projected < 1:
+        routine_line = ("Keep routine HTS testing/ART/PrEP supply levels and continue monthly reporting." if is_hiv
+                         else "Keep a routine RDT/ACT buffer stock and continue monthly reporting.")
         return {"risk_level": "None", "zone": req.zone, "burden": req.burden,
                 "risk_assessment": (
-                    f"## Risk Outlook\n**{req.facility}** has **no malaria cases projected** for "
+                    f"## Risk Outlook\n**{req.facility}** has **no {metric_label} projected** for "
                     f"{req.label or req.ym}, so there is nothing to pre-position for at this facility this month.\n\n"
-                    f"## Recommended Actions\n- Keep a routine RDT/ACT buffer stock and continue monthly reporting.\n"
-                    f"- No facility-specific malaria action is required this month.\n\n"
-                    f"## Monitoring Triggers\n- Re-assess if any confirmed case is reported here, or if a later "
+                    f"## Recommended Actions\n- {routine_line}\n"
+                    f"- No facility-specific action is required this month.\n\n"
+                    f"## Monitoring Triggers\n- Re-assess if any case is reported here, or if a later "
                     f"month projects above zero.")}
 
     # Scale the brief's depth to the actual burden: a near-empty facility must NOT
@@ -572,49 +864,69 @@ def facility_risk(req: FacilityRiskReq):
     client = Groq(api_key=api_key)
 
     recent_txt = "\n".join(
-        f"  {r.get('label')}: {round(r.get('cases')) if r.get('cases') is not None else 'n/a'} confirmed cases"
+        f"  {r.get('label')}: {round(r.get('cases')) if r.get('cases') is not None else 'n/a'} {metric_label}"
         f"{' (forecast)' if r.get('forecast') else ''}"
         for r in (req.recent or [])
     ) or "  (no recent series provided)"
     c = req.context_12m or {}
-    ctx_txt = (f"Trailing 12 months at this facility — confirmed cases: {round(c['cases']) if c.get('cases') is not None else 'n/a'}, "
-               f"ACT courses given: {round(c['act']) if c.get('act') is not None else 'n/a'}, "
-               f"RDT tests done: {round(c['rdt_tested']) if c.get('rdt_tested') is not None else 'n/a'}, "
-               f"total reported (confirmed+presumed): {round(c['total']) if c.get('total') is not None else 'n/a'}.")
-
     inp = req.inputs or {}
+    fac = req.factors or {}
     def _pct(x): return f"{round(x * 100)}%" if isinstance(x, (int, float)) else "n/a"
-    drivers_txt = (f"Burden drivers for this facility — testing gap (fever cases NOT given a parasitological test): {_pct(inp.get('testing_gap'))}, "
-                   f"treatment gap (confirmed cases without an ACT course): {_pct(inp.get('treatment_gap'))}, "
-                   f"diagnostic gap (presumed share of reported cases): {_pct(inp.get('diagnostic_gap'))}.")
+    def _sub(name): return (fac.get(name) or {}).get("sub")
 
-    prompt = f"""You are a malaria surveillance officer at Nigeria's National Malaria Elimination Programme.
+    if is_hiv:
+        ctx_txt = (f"Trailing 12 months at this facility — new HIV-positive diagnoses: {round(c['cases']) if c.get('cases') is not None else 'n/a'}, "
+                   f"HIV tests conducted: {round(c['hts_tested']) if c.get('hts_tested') is not None else 'n/a'}, "
+                   f"currently on ART: {round(c['art_curr']) if c.get('art_curr') is not None else 'n/a'}, "
+                   f"on ART with a viral-load result: {round(c['art_vl_tested']) if c.get('art_vl_tested') is not None else 'n/a'}.")
+        drivers_txt = (f"Burden drivers for this facility (relative to its own LGA peers) — case burden (positivity): {_pct(_sub('case_burden'))}, "
+                       f"testing gap: {_pct(_sub('testing_gap'))}, ART coverage gap: {_pct(_sub('art_gap'))}, "
+                       f"VL-monitoring gap (share of this facility's own ART patients without a routine VL check): {_pct(_sub('vl_gap'))}.")
+        burden_desc = "an LGA-relative score (this facility vs its own LGA peers -- blends case burden/positivity, testing gap, ART coverage gap and VL-monitoring gap)"
+        factor_names = "case burden, testing gap, ART coverage gap, VL-monitoring gap"
+        disease_rule = "Do NOT claim whether HIV transmission is seasonal, and do NOT invent behavioural, seasonal, or epidemiological facts that are not given above."
+        supply_hint = "HTS test kits / ART refills / VL sample-collection capacity"
+    else:
+        ctx_txt = (f"Trailing 12 months at this facility — confirmed cases: {round(c['cases']) if c.get('cases') is not None else 'n/a'}, "
+                   f"ACT courses given: {round(c['act']) if c.get('act') is not None else 'n/a'}, "
+                   f"RDT tests done: {round(c['rdt_tested']) if c.get('rdt_tested') is not None else 'n/a'}, "
+                   f"total reported (confirmed+presumed): {round(c['total']) if c.get('total') is not None else 'n/a'}.")
+        drivers_txt = (f"Burden drivers for this facility — testing gap (fever cases NOT given a parasitological test): {_pct(inp.get('testing_gap'))}, "
+                       f"treatment gap (confirmed cases without an ACT course): {_pct(inp.get('treatment_gap'))}, "
+                       f"diagnostic gap (presumed share of reported cases): {_pct(inp.get('diagnostic_gap'))}.")
+        burden_desc = "an ABSOLUTE clinical score comparable across all Nigerian facilities -- blends case volume, testing gap, treatment gap and diagnostic gap"
+        factor_names = "case level, testing gap, treatment gap, diagnostic gap"
+        disease_rule = "Do NOT claim whether the month is or isn't a malaria transmission season, and do NOT invent seasonal, climatic, or epidemiological facts that are not given above."
+        supply_hint = "RDT/ACT buffer stock"
+
+    prompt = f"""You are {officer} at {programme}.
 Write a concise, decision-ready RISK ASSESSMENT for a single health facility for a FORECAST (future) month.
 Match the DEPTH and SCALE of everything you write to this facility's actual numbers — this is {scale_hint}.
+Stay entirely within this disease -- do not reference any other disease's programmes or interventions.
 
 Facility: {req.facility}{f' (ward: {req.ward})' if req.ward else ''}
 Location: {req.lga} LGA, {req.state} State, Nigeria
 Forecast month being assessed: {req.label or req.ym}
-Projected confirmed malaria cases that month: {projected}
-Facility burden score (0-100, an ABSOLUTE clinical score comparable across all Nigerian facilities — blends case volume, testing gap, treatment gap and diagnostic gap): {req.burden if req.burden is not None else 'n/a'} -> zone "{req.zone or 'n/a'}", risk level "{level}"{f', ranked {req.lga_rank} among its LGA facilities' if req.lga_rank else ''}
+Projected {metric_label} that month: {projected}
+Facility burden score (0-100, {burden_desc}): {req.burden if req.burden is not None else 'n/a'} -> zone "{req.zone or 'n/a'}", risk level "{level}"{f', ranked {req.lga_rank} among its LGA facilities' if req.lga_rank else ''}
 {drivers_txt}
 Recent & projected trajectory:
 {recent_txt}
 {ctx_txt}
 
 RULES (follow strictly):
-- Be SPECIFIC to this facility's numbers ({projected} projected cases, burden {req.burden if req.burden is not None else 'n/a'}, zone {req.zone or 'n/a'}). Do NOT write generic boilerplate that would read the same for any facility.
+- Be SPECIFIC to this facility's numbers ({projected} projected {metric_label}, burden {req.burden if req.burden is not None else 'n/a'}, zone {req.zone or 'n/a'}). Do NOT write generic boilerplate that would read the same for any facility.
 - Keep everything PROPORTIONATE — this is {scale_hint}.
-- Do NOT claim whether the month is or isn't a malaria transmission season, and do NOT invent seasonal, climatic, or epidemiological facts that are not given above.
+- {disease_rule}
 - Never invent case numbers or figures.
 
 Write in markdown with these short sections:
 ## Risk Outlook
-1-2 sentences: what the forecast implies for THIS facility that month, referencing the {projected} projected cases and its burden/zone.
+1-2 sentences: what the forecast implies for THIS facility that month, referencing the {projected} projected {metric_label} and its burden/zone.
 ## Why (drivers)
-{2 if n_actions <= 2 else 3} short bullets on the likely drivers, grounded ONLY in the numbers above (case level, testing gap, treatment gap, diagnostic gap).
+{2 if n_actions <= 2 else 3} short bullets on the likely drivers, grounded ONLY in the numbers above ({factor_names}).
 ## Recommended Actions
-{n_actions} PROPORTIONATE bullet(s), each sized to ~{projected} projected cases — concrete and facility-level, for the 4-6 weeks before this month.
+{n_actions} PROPORTIONATE bullet(s) (e.g. {supply_hint} where relevant), each sized to ~{projected} projected {metric_label} — concrete and facility-level, for the 4-6 weeks before this month.
 ## Monitoring Triggers
 1-2 numeric triggers that would escalate the response.
 

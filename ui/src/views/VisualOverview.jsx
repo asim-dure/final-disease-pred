@@ -4,11 +4,11 @@ import { GeoJsonLayer } from '@deck.gl/layers'
 import { Map } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { Card, InfoTip, CompareChart, MarkdownLite } from '../components'
-import { fmt, COLORS, API_BASE } from '../lib'
+import { fmt, COLORS, API_BASE, loadLgas } from '../lib'
 import FacilityPanel from './FacilityPanel'
-import { ZONE_ORDER, scoreToZone, scoreDetail, buildZones, cl, n0 } from '../burdenScore'
+import { ZONE_ORDER, scoreToZone, scoreDetail, buildZones, cl, n0, pctRanks } from '../burdenScore'
 import { lgaKeyFor } from '../lgaAlias'
-import { BLANK_MAP_STYLE } from '../mapStyle'
+import { blankMapStyle } from '../mapStyle'
 
 const BASE = import.meta.env.BASE_URL || '/'
 const NIGERIA = { longitude: 8.7, latitude: 9.3, zoom: 5.2, pitch: 0, bearing: 0 }
@@ -379,23 +379,68 @@ const ZoneChip = ({ zone }) => (
     background: ZONES[zone].c + '22', color: ZONES[zone].t, border: `1px solid ${ZONES[zone].c}66`, whiteSpace: 'nowrap' }}>{zone}</span>
 )
 
+// per-driver multiplicative effect on cases, relative to the selected scope's
+// forecasted baseline -- identical math to Simulator.jsx's own factor(), which
+// this replaces for the 12 "thin" diseases (Simulator.jsx's own tab is no
+// longer routed to for them -- see App.jsx -- levers/chart/map now live in
+// ONE tab here, same as malaria's own merged What If Simulation).
+function thinFactor(meta, val, base) {
+  if (meta.good === 'opt') {
+    const opt = meta.optimum ?? 27
+    const suit = v => 1 - Math.min(1, Math.abs(v - opt) / 12)
+    const sb = Math.max(0.05, suit(base))
+    return Math.max(0.2, Math.min(2, suit(val) / sb))
+  }
+  if (!base || base <= 0) return 1
+  const frac = (val - base) / base
+  const aud = meta.audience ?? 1
+  return Math.max(0.2, Math.min(3, 1 + meta.elasticity * frac * aud))
+}
+
+// Client-side port of etl_warehouse_common.burden_score's "volume_trend" tier
+// (the ONLY tier the 12 thin diseases use) -- percentile-rank case volume
+// (60%) + percentile-rank trend (40%), blended 60/40 rank/raw exactly like
+// export_burden.py's own percentile-blend. Needed so a lever-adjusted
+// forecast value can be re-ranked against its real peers and recoloured on
+// the map, instead of only ever showing the static precomputed (no-lever)
+// score. `valueByKey`/`trendByKey`: one cross-section (one month) each.
+function volumeTrendScores(valueByKey, trendByKey) {
+  const keys = Object.keys(valueByKey)
+  if (!keys.length) return {}
+  const vol = keys.map(k => valueByKey[k] ?? 0)
+  const volRank = pctRanks(vol).map(r => r * 100)
+  const trend = keys.map(k => trendByKey[k] ?? 0)
+  const trendRank = pctRanks(trend).map(r => r * 100)
+  const raw = keys.map((_, i) => 0.60 * volRank[i] + 0.40 * trendRank[i])
+  const rawRank = pctRanks(raw).map(r => r * 100)
+  const out = {}
+  keys.forEach((k, i) => { out[k] = cl(0.60 * rawRank[i] + 0.40 * raw[i], 0, 100) })
+  return out
+}
+
 // Non-malaria diseases: burden score is precomputed Python-side (etl_warehouse_common.burden_score)
-// and read directly from burden.json's flat per-LGA snapshot — no live client-side recomputation,
-// no levers (no driver data exists to lever), no time slider (one latest snapshot per LGA, not a
-// monthly series). Source "zone" labels vary by disease ("Safe Zone", "Red Zone", canonical
-// "Amber", etc.) so the map/legend colour always derives from the canonical burden_score via
-// scoreToZone() instead, keeping every disease's colouring consistent.
-function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiveItems, activeView, onNavigate }) {
+// and read directly from burden.json's flat per-LGA snapshot, PLUS (for the 12 diseases with a real
+// drivers.json -- see export_ncd_ntd_drivers.py) live client-side lever recomputation for forecast
+// months, using the exact volume_trend formula above. Source "zone" labels vary by disease ("Safe
+// Zone", "Red Zone", canonical "Amber", etc.) so the map/legend colour always derives from the
+// canonical burden_score via scoreToZone() instead, keeping every disease's colouring consistent.
+function StaticZoneMap({ disease, label, variant = 'after', data, rankByLabel, deepDiveItems, activeView, onNavigate }) {
   const [statesGeo, setStatesGeo] = useState(null)
   const [lgasGeo, setLgasGeo] = useState(null)
   const [burden, setBurden] = useState(null)
   const [hover, setHover] = useState(null)
   const [view, setView] = useState(NIGERIA)
-  const [cardSort, setCardSort] = useState('zone')
   const [scope, setScope] = useState('states')
   const [selState, setSelState] = useState(null)
   const [selKey, setSelKey] = useState(null)
   const [monthIdx, setMonthIdx] = useState(0)
+  // Real, research-backed levers (export_ncd_ntd_drivers.py) -- null for any
+  // disease without a drivers.json (currently only TB), in which case every
+  // lever/scenario-chart element below simply doesn't render (same honest
+  // degrade `hasHistory` already uses for TB's missing time slider).
+  const [drivers, setDrivers] = useState(null)
+  const [vals, setVals] = useState({})
+  const [lgaSeries, setLgaSeries] = useState(null)
 
   useEffect(() => {
     fetch(`${BASE}data/geo/states.geojson`).then(r => r.json()).then(setStatesGeo).catch(() => {})
@@ -405,6 +450,11 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiv
     setBurden(null)
     fetch(`${BASE}data/${variant}/${disease}/burden.json`).then(r => r.json()).then(setBurden).catch(() => setBurden({ lgas: {}, states: {} }))
   }, [variant, disease])
+  useEffect(() => {
+    setDrivers(null)
+    fetch(`${BASE}data/${variant}/${disease}/drivers.json`).then(r => r.json()).then(setDrivers).catch(() => setDrivers(null))
+  }, [variant, disease])
+  useEffect(() => { setLgaSeries(null); loadLgas(variant, disease).then(setLgaSeries).catch(() => setLgaSeries({})) }, [variant, disease])
 
   const lgaMap = burden?.lgas || {}
   const stateMap = burden?.states || {}
@@ -423,14 +473,74 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiv
   const history = burden?.history
   const hasHistory = !!(history && history.months?.length)
   const months = history?.months || []
-  // default to the most recent ACTUAL month (mirrors malaria's own pattern
-  // below) -- forecast months are there to step into, not the default view.
+  // Default to the FIRST forecast month, not the last actual one -- this is
+  // the What-If Simulation tab, so it should open with levers already live
+  // and the map already showing a scenario, not on inert reported history
+  // that the user has to manually scrub past every time. Falls back to the
+  // last month if a disease somehow has no forecast tail at all.
   useEffect(() => {
-    if (hasHistory) { let i = months.length - 1; while (i > 0 && months[i].forecast) i--; setMonthIdx(i) }
+    if (hasHistory) {
+      let i = months.findIndex(m => m.forecast)
+      if (i === -1) i = months.length - 1
+      setMonthIdx(i)
+    }
   }, [hasHistory, months.length])
   const curMonth = months[monthIdx] || null
 
+  // Lever baseline for whatever's currently selected (a specific LGA, a
+  // whole state, or the national scope) -- same {base,lo,hi} shape
+  // Simulator.jsx already used for these same drivers.json files.
+  const driverBaseline = useMemo(() => {
+    if (!drivers) return null
+    if (scope === 'states') return selKey ? drivers.states[selKey] : drivers.national
+    return selKey ? drivers.lgas[selKey] : (selState ? drivers.states[selState] : drivers.national)
+  }, [drivers, scope, selKey, selState])
+
+  useEffect(() => {
+    if (drivers && driverBaseline) setVals(Object.fromEntries(Object.keys(drivers.meta).map(id => [id, driverBaseline[id]?.base ?? 0])))
+  }, [drivers, driverBaseline])
+
+  // A single scalar multiplier from the currently-selected scope's own
+  // levers. Because every lever is stored/moved as a RELATIVE fraction of
+  // its own baseline (frac = (val-base)/base), this same fraction applies
+  // uniformly to every area's own real baseline when propagated to the map
+  // below -- i.e. "move Poverty +20%" means +20% relative to each area's
+  // OWN real poverty figure, not one number copied everywhere. That's why
+  // one multiplier can safely recolour every LGA/state at once.
+  const multiplier = useMemo(() => {
+    if (!drivers || !driverBaseline) return 1
+    let m = 1
+    for (const id of Object.keys(drivers.meta)) {
+      const base = driverBaseline[id]?.base ?? 0
+      m *= thinFactor(drivers.meta[id], vals[id] ?? base, base)
+    }
+    return Math.max(0.1, Math.min(4, m))
+  }, [vals, driverBaseline, drivers])
+
+  // Re-ranked, lever-adjusted burden scores for the CURRENT month/scope --
+  // only computed (and only used) when a lever has actually moved AND the
+  // current month is a forecast month, exactly matching "moving a lever
+  // only conditions the future, never rewrites already-reported history."
+  // Falls back to the precomputed static score otherwise (identical to
+  // before this change), so the default view is unaffected.
+  const adjustedScores = useMemo(() => {
+    if (!hasHistory || !drivers || Math.abs(multiplier - 1) < 1e-6 || !curMonth?.forecast) return null
+    const store = scope === 'states' ? history.states : history.lgas
+    if (!store) return null
+    const valueByKey = {}, trendByKey = {}
+    Object.entries(store).forEach(([key, arr]) => {
+      const raw = arr.value?.[monthIdx]
+      if (raw == null) return
+      const adj = raw * multiplier
+      const prev = arr.value?.[monthIdx - 1]
+      valueByKey[key] = adj
+      trendByKey[key] = prev != null ? adj - prev : 0
+    })
+    return volumeTrendScores(valueByKey, trendByKey)
+  }, [hasHistory, drivers, multiplier, curMonth, scope, monthIdx, history])
+
   const scoreFor = key => {
+    if (adjustedScores && adjustedScores[key] != null) return adjustedScores[key]
     if (scope === 'states') {
       if (hasHistory && history.states[key]) return history.states[key].burden_score[monthIdx]
       return stateMap[key]?.burden_score ?? 0
@@ -458,7 +568,7 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiv
       const fillFor = key => { const z = ZONES[zoneFor(key)]; return [...z.fill, z.a] }
       return [new GeoJsonLayer({ id: 'states-static', data: statesGeo, pickable: true, stroked: true, filled: true,
         getFillColor: f => fillFor(f.properties.st), getLineColor: [255, 255, 255], lineWidthMinPixels: 1,
-        updateTriggers: { getFillColor: monthIdx },
+        updateTriggers: { getFillColor: [monthIdx, adjustedScores] },
         onClick: info => info.object && drillInto(info.object.properties.st),
         onHover: info => setHover(info.object ? { ...info, kind: 'state' } : null) })]
     }
@@ -467,10 +577,10 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiv
     const fillFor = key => { const z = ZONES[zoneFor(key)]; return [...z.fill, z.a] }
     return [new GeoJsonLayer({ id: 'lgas-static', data: dat, pickable: true, stroked: true, filled: true,
       getFillColor: f => fillFor(lgaKeyFor(f.properties.st, f.properties.lga)), getLineColor: [255, 255, 255], lineWidthMinPixels: 0.4,
-      updateTriggers: { getFillColor: monthIdx },
+      updateTriggers: { getFillColor: [monthIdx, adjustedScores] },
       onClick: info => info.object && setSelKey(lgaKeyFor(info.object.properties.st, info.object.properties.lga)),
       onHover: info => setHover(info.object ? { ...info, kind: 'lga' } : null) })]
-  }, [scope, statesGeo, lgasGeo, selState, lgaMap, stateMap, monthIdx])
+  }, [scope, statesGeo, lgasGeo, selState, lgaMap, stateMap, monthIdx, adjustedScores])
 
   const dist = useMemo(() => {
     const d = {}; ZONE_ORDER.forEach(z => { d[z] = 0 })
@@ -480,33 +590,45 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiv
       Object.keys(lgaMap).filter(k => !selState || k.split('|||')[0] === selState).forEach(k => { d[zoneFor(k)]++ })
     }
     return d
-  }, [lgaMap, stateMap, scope, selState, monthIdx])
-
-  const cards = useMemo(() => {
-    if (scope === 'states') {
-      const arr = Object.entries(stateMap).map(([key, v]) => {
-        const score = scoreFor(key)
-        return { key, state: key, lga: null, ...v, burden_score: score, canonZone: scoreToZone(score ?? 0) }
-      })
-      if (cardSort === 'value') arr.sort((a, b) => (b.value || 0) - (a.value || 0))
-      else arr.sort((a, b) => (b.burden_score || 0) - (a.burden_score || 0))
-      return arr
-    }
-    const arr = Object.entries(lgaMap).filter(([key]) => !selState || key.split('|||')[0] === selState).map(([key, v]) => {
-      const [state, lga] = key.split('|||')
-      const score = scoreFor(key)
-      return { key, state, lga, ...v, burden_score: score, canonZone: scoreToZone(score ?? 0) }
-    })
-    if (cardSort === 'value') arr.sort((a, b) => (b.value || 0) - (a.value || 0))
-    else arr.sort((a, b) => (b.burden_score || 0) - (a.burden_score || 0))
-    return arr
-  }, [lgaMap, stateMap, cardSort, scope, selState, monthIdx])
+  }, [lgaMap, stateMap, scope, selState, monthIdx, adjustedScores])
 
   const ready = scope === 'states' ? !!statesGeo : !!lgasGeo
   const sel = selKey ? (scope === 'states' ? stateMap[selKey] : lgaMap[selKey]) : null
   const hasStateHistory = !!(history && history.states && Object.keys(history.states).length)
   const hotCount = (dist['Red'] || 0) + (dist['Amber'] || 0)
   const unitCount = scope === 'states' ? Object.keys(stateMap).length : Object.keys(lgaMap).filter(k => !selState || k.split('|||')[0] === selState).length
+
+  // Real case-count series for the line graph -- same national/state/LGA
+  // files (national.json/states.json/lgas.json) Simulator.jsx's own chart
+  // already reads, scoped to whatever's currently selected on the map above
+  // (so the map and the chart always describe the SAME place).
+  const { baseSeries, locLabel } = useMemo(() => {
+    if (scope === 'lgas' && selKey && lgaSeries) {
+      const series = (lgaSeries[selKey] || []).map(s => ({ date: s.d, cases: s.c, forecast: !!s.f }))
+      return { baseSeries: series, locLabel: selKey.replace('|||', ', ') }
+    }
+    if (scope === 'lgas' && selState) return { baseSeries: data?.states?.[selState] || [], locLabel: selState }
+    if (scope === 'states' && selKey) return { baseSeries: data?.states?.[selKey] || [], locLabel: selKey }
+    return { baseSeries: data?.national || [], locLabel: 'Nigeria (national)' }
+  }, [scope, selKey, selState, lgaSeries, data])
+
+  const scenarioMerged = useMemo(() => baseSeries.map(d => ({
+    date: d.date, Baseline: Math.round(d.cases || 0),
+    Scenario: d.forecast ? Math.round((d.cases || 0) * multiplier) : Math.round(d.cases || 0),
+  })), [baseSeries, multiplier])
+
+  const scenFc = baseSeries.filter(d => d.forecast)
+  const scenBaseTotal = scenFc.reduce((a, b) => a + (b.cases || 0), 0)
+  const scenTotal = scenBaseTotal * multiplier
+  const scenAverted = scenBaseTotal - scenTotal
+  const firstForecastDate = baseSeries.find(d => d.forecast)?.date
+
+  const leverCats = drivers ? [...new Set(Object.values(drivers.meta).map(m => m.cat))] : []
+  const resetLevers = () => { if (drivers && driverBaseline) setVals(Object.fromEntries(Object.keys(drivers.meta).map(id => [id, driverBaseline[id]?.base ?? 0]))) }
+  // Mirrors malaria's own showLevers gate exactly: testing a what-if against
+  // already-reported history doesn't mean anything, so the levers panel only
+  // ever appears once the time slider is on a forecast month.
+  const showLevers = !!(drivers && curMonth?.forecast)
 
   return (
     <>
@@ -564,66 +686,151 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiv
         </Card>
       )}
 
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 16 }}>
-        {ZONE_ORDER.map(z => (
-          <div key={z} className="card" style={{ flex: 1, minWidth: 92, padding: '12px 14px', position: 'relative', overflow: 'visible' }}>
-            <div className="accent-bar" style={{ background: ZONES[z].c, borderRadius: 'var(--r) 0 0 var(--r)' }} />
-            <div style={{ fontSize: '.64rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: ZONES[z].t, display: 'flex', alignItems: 'center' }}>
-              {z}<InfoTip text={ZONE_INFO[z]} />
+      <div className="row" style={{ alignItems: 'flex-start' }}>
+        {/* ── levers — forecast months only; testing "what if" on real history doesn't mean anything, same gate malaria's own panel uses ── */}
+        {showLevers && (
+          <Card className="col" title={<span>Levers<InfoTip w={360} title="Real, research-backed levers" text="Each slider moves a real per-LGA baseline (population, poverty/MPI, population density, plus one disease-specific real covariate -- see NCD_NTD_LEVER_RESEARCH.md for every source/citation) by a relative percentage. Population and Poverty are scoped to this disease's real at-risk sub-population (e.g. adult women for breast/cervical cancer), not the whole population. The map and chart to the right both update instantly from the SAME multiplier." /></span>}
+            sub={`Baseline = real recent data for ${locLabel}`}
+            style={{ flex: 1, minWidth: 300, maxWidth: 390 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <button className="btn" onClick={resetLevers}>↺ Reset to baseline</button>
             </div>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: '1.5rem', color: 'var(--txt-0)', marginTop: 4 }}>{dist[z] || 0}</div>
-          </div>
-        ))}
-      </div>
-
-      <Card title={<span>Nigeria — {label} hotspot zones, {scope === 'states' ? 'all states' : (selState ? `${selState} LGAs` : 'all LGAs')}<InfoTip w={300} text={`Click any ${scope === 'states' ? 'state to drill into its LGAs' : 'LGA to see its precomputed score and source data below'}.`} /></span>}
-        sub={`Hotspots (Red+Amber): ${hotCount} of ${unitCount} ${scope === 'states' ? 'states' : 'LGAs'}`}
-        right={<span className="chip dot">{unitCount} {scope === 'states' ? 'states' : 'LGAs'}</span>}>
-        <div style={{ position: 'relative', height: 520, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
-          {!ready && <div className="loading" style={{ height: '100%' }}><div className="spinner" />Loading map…</div>}
-          {ready && (
-            <DeckGL viewState={view} controller={true} layers={layers} onViewStateChange={e => setView(e.viewState)} style={{ position: 'absolute', inset: 0 }}>
-              <Map mapStyle={BLANK_MAP_STYLE} />
-            </DeckGL>
-          )}
-          {hover?.object && (() => {
-            if (hover.kind === 'state') {
-              const key = hover.object.properties.st
-              const v = stateMap[key]; if (!v) return null
-              const z = zoneFor(key)
-              const score = scoreFor(key)
-              return (
-                <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: 'var(--bg-2)', border: '1px solid var(--border)',
-                  borderRadius: 8, padding: '9px 12px', fontSize: '.76rem', boxShadow: '0 8px 24px rgba(15,34,48,.16)', zIndex: 5, minWidth: 160 }}>
-                  <div style={{ fontWeight: 700, color: 'var(--txt-0)', marginBottom: 4 }}>{key}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <ZoneChip zone={z} /><span style={{ fontFamily: 'var(--mono)', color: 'var(--txt-1)' }}>{(score ?? 0).toFixed(1)}</span>
-                  </div>
-                  <div className="muted" style={{ fontSize: '.68rem' }}>value {n0(v.value)} (summed across LGAs){hasHistory && curMonth ? ` · ${curMonth.label}` : ''}</div>
-                </div>
-              )
-            }
-            const key = lgaKeyFor(hover.object.properties.st, hover.object.properties.lga)
-            const v = lgaMap[key]; if (!v) return null
-            const z = zoneFor(key)
-            const score = scoreFor(key)
-            return (
-              <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: 'var(--bg-2)', border: '1px solid var(--border)',
-                borderRadius: 8, padding: '9px 12px', fontSize: '.76rem', boxShadow: '0 8px 24px rgba(15,34,48,.16)', zIndex: 5, minWidth: 160 }}>
-                <div style={{ fontWeight: 700, color: 'var(--txt-0)', marginBottom: 4 }}>{hover.object.properties.lga}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <ZoneChip zone={z} /><span style={{ fontFamily: 'var(--mono)', color: 'var(--txt-1)' }}>{(score ?? 0).toFixed(1)}</span>
-                </div>
-                <div className="muted" style={{ fontSize: '.68rem' }}>value {n0(v.value)} · source zone "{v.zone || '—'}"{hasHistory && curMonth ? ` · ${curMonth.label}` : ''}</div>
+            {leverCats.map(cat => (
+              <div key={cat}>
+                <div className="cat-label">{cat}</div>
+                {Object.entries(drivers.meta).filter(([, m]) => m.cat === cat).map(([id, meta]) => {
+                  const b = driverBaseline?.[id] || { base: 0, lo: 0, hi: 1 }
+                  const v = vals[id] ?? b.base
+                  const p = ((v - b.lo) / (b.hi - b.lo || 1)) * 100
+                  const step = b.hi > 1000 ? Math.max(1, Math.round((b.hi - b.lo) / 200)) : (meta.unit === '%' ? 0.5 : 0.1)
+                  const f = thinFactor(meta, v, b.base)
+                  return (
+                    <div className="lever" key={id}>
+                      <div className="lever-head">
+                        <span className="name">{meta.label}
+                          {meta.audience_label && <InfoTip title="What this lever really covers" text={meta.audience_label} />}
+                        </span>
+                        <span className="val">{v >= 1000 ? fmt(v) : v.toFixed(1)} {meta.unit}</span>
+                      </div>
+                      <input type="range" min={b.lo} max={b.hi} value={v} step={step}
+                        style={{ '--pct': Math.max(0, Math.min(100, p)) + '%' }}
+                        onChange={e => setVals(s => ({ ...s, [id]: +e.target.value }))} />
+                      <div className="lever-base">
+                        baseline {b.base >= 1000 ? fmt(b.base) : b.base.toFixed(1)} {meta.unit} ·
+                        effect ×<b style={{ color: f <= 1 ? COLORS.green : COLORS.coral }}>{f.toFixed(2)}</b>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })()}
-          <div style={{ position: 'absolute', left: 12, bottom: 12, background: 'rgba(255,255,255,.93)', borderRadius: 8, padding: '8px 11px', fontSize: '.68rem', color: 'var(--txt-1)', boxShadow: '0 2px 10px rgba(0,0,0,.08)' }}>
-            <div style={{ fontWeight: 700, marginBottom: 5 }}>Hotspot zone</div>
-            {ZONE_ORDER.map(z => (<div key={z} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: ZONES[z].c }} />{z}</div>))}
+            ))}
+          </Card>
+        )}
+
+        {/* ── map + chart, same lever state as the panel on the left ── */}
+        <div className="col" style={{ flex: showLevers ? 2 : 1, minWidth: 460, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {drivers && !showLevers && (
+            <Card style={{ background: 'rgba(13,148,136,.07)', border: '1px solid rgba(13,148,136,.3)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '.84rem', color: 'var(--txt-1)', lineHeight: 1.6 }}>
+                <span style={{ fontSize: '1.1rem' }}>✓</span>
+                <div>
+                  <b>Showing actual reported data for {curMonth?.label || '—'}.</b> This already happened, so the intervention levers are hidden — there's nothing to simulate against real history.
+                  <InfoTip w={300} title="Why no levers here" text="Intervention levers (population, poverty, density, etc.) only make sense when testing future scenarios. For months that already happened, the map simply shows the real reported numbers." />
+                  {' '}Move the time slider above into a <b>🔮 Forecast</b> month to unlock the levers and test interventions.
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
+            {ZONE_ORDER.map(z => (
+              <div key={z} className="card" style={{ flex: 1, minWidth: 92, padding: '12px 14px', position: 'relative', overflow: 'visible' }}>
+                <div className="accent-bar" style={{ background: ZONES[z].c, borderRadius: 'var(--r) 0 0 var(--r)' }} />
+                <div style={{ fontSize: '.64rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: ZONES[z].t, display: 'flex', alignItems: 'center' }}>
+                  {z}<InfoTip text={ZONE_INFO[z]} />
+                </div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: '1.5rem', color: 'var(--txt-0)', marginTop: 4 }}>{dist[z] || 0}</div>
+              </div>
+            ))}
           </div>
+
+          <Card title={<span>Nigeria — {label} hotspot zones, {scope === 'states' ? 'all states' : (selState ? `${selState} LGAs` : 'all LGAs')}<InfoTip w={300} text={`Click any ${scope === 'states' ? 'state to drill into its LGAs' : 'LGA to see its precomputed score and source data below'}.`} /></span>}
+            sub={`Hotspots (Red+Amber): ${hotCount} of ${unitCount} ${scope === 'states' ? 'states' : 'LGAs'}`}
+            right={<span className="chip dot">{unitCount} {scope === 'states' ? 'states' : 'LGAs'}</span>}>
+            <div style={{ position: 'relative', height: 520, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--bg-3)' }}>
+              {!ready && <div className="loading" style={{ height: '100%' }}><div className="spinner" />Loading map…</div>}
+              {ready && (
+                <DeckGL viewState={view} controller={true} layers={layers} onViewStateChange={e => setView(e.viewState)} style={{ position: 'absolute', inset: 0 }}>
+                  <Map key={typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') : 'light'} mapStyle={blankMapStyle()} />
+                </DeckGL>
+              )}
+              {hover?.object && (() => {
+                if (hover.kind === 'state') {
+                  const key = hover.object.properties.st
+                  const v = stateMap[key]; if (!v) return null
+                  const z = zoneFor(key)
+                  const score = scoreFor(key)
+                  return (
+                    <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: 'var(--bg-2)', border: '1px solid var(--border)',
+                      borderRadius: 8, padding: '9px 12px', fontSize: '.76rem', boxShadow: '0 8px 24px rgba(15,34,48,.16)', zIndex: 5, minWidth: 160 }}>
+                      <div style={{ fontWeight: 700, color: 'var(--txt-0)', marginBottom: 4 }}>{key}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <ZoneChip zone={z} /><span style={{ fontFamily: 'var(--mono)', color: 'var(--txt-1)' }}>{(score ?? 0).toFixed(1)}</span>
+                      </div>
+                      <div className="muted" style={{ fontSize: '.68rem' }}>value {n0(v.value)} (summed across LGAs){hasHistory && curMonth ? ` · ${curMonth.label}` : ''}</div>
+                    </div>
+                  )
+                }
+                const key = lgaKeyFor(hover.object.properties.st, hover.object.properties.lga)
+                const v = lgaMap[key]; if (!v) return null
+                const z = zoneFor(key)
+                const score = scoreFor(key)
+                return (
+                  <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: 'var(--bg-2)', border: '1px solid var(--border)',
+                    borderRadius: 8, padding: '9px 12px', fontSize: '.76rem', boxShadow: '0 8px 24px rgba(15,34,48,.16)', zIndex: 5, minWidth: 160 }}>
+                    <div style={{ fontWeight: 700, color: 'var(--txt-0)', marginBottom: 4 }}>{hover.object.properties.lga}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <ZoneChip zone={z} /><span style={{ fontFamily: 'var(--mono)', color: 'var(--txt-1)' }}>{(score ?? 0).toFixed(1)}</span>
+                    </div>
+                    <div className="muted" style={{ fontSize: '.68rem' }}>value {n0(v.value)} · source zone "{v.zone || '—'}"{hasHistory && curMonth ? ` · ${curMonth.label}` : ''}</div>
+                  </div>
+                )
+              })()}
+              <div style={{ position: 'absolute', left: 12, bottom: 12, background: 'rgba(255,255,255,.93)', borderRadius: 8, padding: '8px 11px', fontSize: '.68rem', color: 'var(--txt-1)', boxShadow: '0 2px 10px rgba(0,0,0,.08)' }}>
+                <div style={{ fontWeight: 700, marginBottom: 5 }}>Hotspot zone</div>
+                {ZONE_ORDER.map(z => (<div key={z} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: ZONES[z].c }} />{z}</div>))}
+              </div>
+            </div>
+          </Card>
+
+          {baseSeries.length > 0 && (
+            <Card title={`${locLabel} — baseline vs scenario`} sub={showLevers ? 'Forecast period responds to the levers; history is fixed' : 'Move the time slider to a forecast month to unlock levers'}>
+              {showLevers && (
+                <div className="row" style={{ marginBottom: 14 }}>
+                  <Card className="col" style={{ minWidth: 0, background: 'var(--bg-2)' }}>
+                    <div className="scenario-readout">
+                      <div className="lbl">Scenario cases · forecast horizon</div>
+                      <div className="big" style={{ color: multiplier <= 1 ? COLORS.green : COLORS.coral }}>{fmt(scenTotal)}</div>
+                      <div className="muted" style={{ fontSize: '.8rem' }}>baseline {fmt(scenBaseTotal)}</div>
+                    </div>
+                  </Card>
+                  <Card className="col" style={{ minWidth: 0, background: 'var(--bg-2)' }}>
+                    <div className="scenario-readout">
+                      <div className="lbl">{scenAverted >= 0 ? 'Cases averted' : 'Additional cases'}</div>
+                      <div className="big" style={{ color: scenAverted >= 0 ? COLORS.green : COLORS.coral }}>{fmt(Math.abs(scenAverted))}</div>
+                      <div className="muted" style={{ fontSize: '.8rem' }}>×{multiplier.toFixed(3)} vs baseline</div>
+                    </div>
+                  </Card>
+                </div>
+              )}
+              <CompareChart data={scenarioMerged} height={270} splitDate={firstForecastDate} splitLabel="Forecast →" series={[
+                { key: 'Baseline', name: 'Baseline forecast', color: COLORS.accent2, dashed: true },
+                { key: 'Scenario', name: 'Scenario', color: multiplier <= 1 ? COLORS.accent : COLORS.coral },
+              ]} />
+            </Card>
+          )}
         </div>
-      </Card>
+      </div>
 
       {scope === 'lgas' && selKey && selKey.includes('|||') && (
         <FacilityPanel disease={disease} stateName={selKey.split('|||')[0]} lga={selKey.split('|||')[1]} selMonth={curMonth}
@@ -645,27 +852,6 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiv
         </Card>
       )}
 
-      <Card style={{ marginTop: 18 }} title={scope === 'states' ? 'States — by burden' : 'LGAs — by burden'}
-        right={<div style={{ display: 'inline-flex', background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 8, padding: 3 }}>
-          {[['zone', 'By burden'], ['value', 'By value']].map(([k, lbl]) => (
-            <button key={k} onClick={() => setCardSort(k)} style={{ border: 'none', cursor: 'pointer', padding: '5px 12px', borderRadius: 6, fontSize: '.76rem', fontWeight: 600, fontFamily: 'var(--font)',
-              background: cardSort === k ? 'var(--bg-1)' : 'transparent', color: cardSort === k ? 'var(--accent)' : 'var(--txt-2)' }}>{lbl}</button>))}
-        </div>}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 10, maxHeight: 420, overflowY: 'auto', paddingRight: 4 }}>
-          {cards.slice(0, 200).map(c => (
-            <div key={c.key} onClick={() => setSelKey(c.key)} style={{ cursor: 'pointer',
-              border: selKey === c.key ? `2px solid ${ZONES[c.canonZone].c}` : '1px solid var(--border)', borderRadius: 10, padding: '11px 13px',
-              borderLeft: `4px solid ${ZONES[c.canonZone].c}`, background: 'var(--bg-1)' }}>
-              <div style={{ fontWeight: 700, fontSize: '.84rem', color: 'var(--txt-0)', marginBottom: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.lga || c.state}</div>
-              {c.lga && <div style={{ fontSize: '.7rem', color: 'var(--txt-2)', marginBottom: 6 }}>{c.state}</div>}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><ZoneChip zone={c.canonZone} /></div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: 'var(--txt-1)', marginTop: 8 }}>
-                value {n0(c.value)} · burden <b style={{ color: ZONES[c.canonZone].t }}>{(c.burden_score ?? 0).toFixed(1)}</b>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
     </>
   )
 }
@@ -673,7 +859,7 @@ function StaticZoneMap({ disease, label, variant = 'after', rankByLabel, deepDiv
 export default function VisualOverview({ data, variant = 'after', allLgas = false, disease = 'malaria', deepDiveItems, activeView, onNavigate }) {
   if (disease !== 'malaria') {
     const label = data?.meta?.label || disease
-    return <StaticZoneMap disease={disease} label={label} variant={variant} deepDiveItems={deepDiveItems} activeView={activeView} onNavigate={onNavigate} />
+    return <StaticZoneMap disease={disease} label={label} variant={variant} data={data} deepDiveItems={deepDiveItems} activeView={activeView} onNavigate={onNavigate} />
   }
   const [statesGeo, setStatesGeo] = useState(null)
   const [lgasGeo, setLgasGeo] = useState(null)
@@ -1244,11 +1430,11 @@ export default function VisualOverview({ data, variant = 'after', allLgas = fals
               <InfoTip w={300} text={scope === 'states' ? 'Click a state to drill into its LGAs. Hover any area for its score.' : 'Click any LGA to see exactly how its score was calculated, in the panel below.'} /></span>}
             sub={`Hotspots (Red+Amber): ${hotScen} of ${units.length}${hotScen !== hotBase ? `  ·  was ${hotBase} before levers` : ''}`}
             right={(scope === 'lgas' && !allLgas) ? <button className="btn" onClick={backToStates}>← All states</button> : <span className="chip dot">{allLgas ? `${units.length} LGAs` : '37 states'}</span>}>
-            <div style={{ position: 'relative', height: 520, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
+            <div style={{ position: 'relative', height: 520, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--bg-3)' }}>
               {!ready && <div className="loading" style={{ height: '100%' }}><div className="spinner" />Loading map…</div>}
               {ready && (
                 <DeckGL viewState={view} controller={true} layers={layers} onViewStateChange={e => setView(e.viewState)} style={{ position: 'absolute', inset: 0 }}>
-                  <Map mapStyle={BLANK_MAP_STYLE} />
+                  <Map key={typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') : 'light'} mapStyle={blankMapStyle()} />
                 </DeckGL>
               )}
               {hover?.object && (() => {

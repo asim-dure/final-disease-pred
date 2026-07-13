@@ -1,0 +1,815 @@
+{
+  "source_note": "Key Population: NDARS (system_id=7) only, recent-12mo monthly average. Socioeconomic: OPHI/NBS Multidimensional Poverty Index 2019 (state-level survey, same dataset malaria's model trains on). Prevalence/population-estimate citations: Nigeria IBBSS 2020-2021 (PMC) + NACA Key Population Size Estimation 2023.",
+  "national_adult_prevalence_pct": 1.3,
+  "nigeria_total_plhiv_estimate": 1900000,
+  "kp": {
+    "msm": {
+      "display": "MSM",
+      "male_only": true,
+      "prevalence_pct": 25.0,
+      "pop_estimate": 600000,
+      "prep_eligible_monthly_national": 526.4,
+      "prep_eligible_monthly_by_state": {
+        "Abia": 1.2,
+        "Adamawa": 49.9,
+        "Akwa Ibom": 116.0,
+        "Anambra": 0.2,
+        "Bauchi": 118.5,
+        "Bayelsa": 0.1,
+        "Benue": 3.8,
+        "Borno": 26.6,
+        "Cross River": 6.4,
+        "Delta": 2.5,
+        "Ebonyi": 2.7,
+        "Edo": 6.4,
+        "Ekiti": 4.3,
+        "Enugu": 1.0,
+        "FCT": 4.0,
+        "Gombe": 10.1,
+        "Imo": 0.0,
+        "Jigawa": 41.7,
+        "Kaduna": 2.7,
+        "Kano": 70.7,
+        "Katsina": 8.2,
+        "Kebbi": 21.0,
+        "Kogi": 5.7,
+        "Kwara": 14.0,
+        "Lagos": 1.6,
+        "Nasarawa": 1.0,
+        "Niger": 0.3,
+        "Ogun": 1.9,
+        "Ondo": 2.4,
+        "Osun": 12.6,
+        "Oyo": 1.3,
+        "Plateau": 0.4,
+        "Rivers": 1.3,
+        "Sokoto": 7.8,
+        "Taraba": 52.0,
+        "Yobe": 21.4,
+        "Zamfara": 38.2
+      },
+      "last_ym": 24316,
+      "tested_monthly_national": null,
+      "tested_pos_monthly_national": null,
+      "positivity_pct": null,
+      "audience": 0.0789,
+      "kp_plhiv_estimate": 150000
+    },
+    "pwid": {
+      "display": "PWID (People who inject drugs)",
+      "male_only": false,
+      "prevalence_pct": 10.9,
+      "pop_estimate": 441500,
+      "prep_eligible_monthly_national": 527.1,
+      "prep_eligible_monthly_by_state": {
+        "Abia": 1.0,
+        "Adamawa": 0.0,
+        "Akwa Ibom": 0.0,
+        "Anambra": 81.1,
+        "Bauchi": 0.1,
+        "Bayelsa": 0.0,
+        "Benue": 0.0,
+        "Borno": 32.6,
+        "Cross River": 0.0,
+        "Delta": 0.0,
+        "Ebonyi": 258.6,
+        "Edo": 0.0,
+        "Enugu": 1.0,
+        "FCT": 0.0,
+        "Gombe": 127.2,
+        "Imo": 1.0,
+        "Jigawa": 1.1,
+        "Kaduna": 0.0,
+        "Kano": 0.0,
+        "Katsina": 0.0,
+        "Kogi": 0.0,
+        "Kwara": 125.1,
+        "Lagos": 0.0,
+        "Ogun": 0.0,
+        "Ondo": 0.0,
+        "Osun": 0.0,
+        "Oyo": 0.0,
+        "Plateau": 0.0,
+        "Rivers": 0.0,
+        "Sokoto": 0.0,
+        "Taraba": 0.0,
+        "Yobe": 0.0,
+        "Zamfara": 0.0
+      },
+      "last_ym": 24316,
+      "tested_monthly_national": 2874.5,
+      "tested_pos_monthly_national": 60.7,
+      "positivity_pct": 2.11,
+      "audience": 0.0253,
+      "kp_plhiv_estimate": 48124
+    },
+    "sw": {
+      "display": "Sex Workers",
+      "male_only": false,
+      "prevalence_pct": 15.5,
+      "pop_estimate": 740000,
+      "prep_eligible_monthly_national": 1755.6,
+      "prep_eligible_monthly_by_state": {
+        "Abia": 0.3,
+        "Adamawa": 0.0,
+        "Akwa Ibom": 0.0,
+        "Anambra": 892.0,
+        "Bauchi": 0.0,
+        "Bayelsa": 0.0,
+        "Benue": 1.8,
+        "Borno": 19.9,
+        "Cross River": 0.0,
+        "Delta": 0.3,
+        "Ebonyi": 673.0,
+        "Edo": 0.0,
+        "FCT": 0.3,
+        "Gombe": 451.2,
+        "Imo": 0.0,
+        "Jigawa": 8.9,
+        "Kaduna": 0.5,
+        "Kano": 6.5,
+        "Katsina": 1.0,
+        "Kebbi": 16.0,
+        "Kogi": 0.0,
+        "Kwara": 172.2,
+        "Lagos": 0.2,
+        "Ogun": 0.0,
+        "Ondo": 0.0,
+        "Osun": 0.0,
+        "Oyo": 0.0,
+        "Plateau": 0.0,
+        "Rivers": 0.0,
+        "Sokoto": 0.8,
+        "Taraba": 0.0,
+        "Yobe": 0.0,
+        "Zamfara": 0.0
+      },
+      "last_ym": 24316,
+      "tested_monthly_national": 6186.6,
+      "tested_pos_monthly_national": 115.1,
+      "positivity_pct": 1.86,
+      "audience": 0.0604,
+      "kp_plhiv_estimate": 114700
+    },
+    "tg": {
+      "display": "Transgender",
+      "male_only": false,
+      "prevalence_pct": 28.8,
+      "pop_estimate": 94000,
+      "prep_eligible_monthly_national": 255.2,
+      "prep_eligible_monthly_by_state": {
+        "Abia": 4.0,
+        "Adamawa": 0.0,
+        "Akwa Ibom": 0.0,
+        "Anambra": 74.3,
+        "Bauchi": 0.0,
+        "Bayelsa": 0.0,
+        "Benue": 0.0,
+        "Borno": 0.0,
+        "Cross River": 0.0,
+        "Delta": 0.0,
+        "Ebonyi": 35.9,
+        "Edo": 0.0,
+        "FCT": 0.0,
+        "Gombe": 112.4,
+        "Imo": 0.0,
+        "Jigawa": 0.0,
+        "Kaduna": 0.0,
+        "Kano": 0.5,
+        "Katsina": 0.0,
+        "Kebbi": 1.0,
+        "Kogi": 0.0,
+        "Kwara": 76.2,
+        "Lagos": 0.0,
+        "Ogun": 0.0,
+        "Ondo": 0.0,
+        "Osun": 0.0,
+        "Oyo": 0.0,
+        "Plateau": 0.0,
+        "Rivers": 0.0,
+        "Sokoto": 0.0,
+        "Taraba": 0.0,
+        "Yobe": 0.0,
+        "Zamfara": 0.0
+      },
+      "last_ym": 24316,
+      "tested_monthly_national": 1222.9,
+      "tested_pos_monthly_national": 31.2,
+      "positivity_pct": 2.55,
+      "audience": 0.0142,
+      "kp_plhiv_estimate": 27072
+    }
+  },
+  "kp_series": {
+    "months": [
+      {
+        "ym": "2023-01",
+        "label": "Jan 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-02",
+        "label": "Feb 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-03",
+        "label": "Mar 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-04",
+        "label": "Apr 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-05",
+        "label": "May 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-06",
+        "label": "Jun 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-07",
+        "label": "Jul 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-08",
+        "label": "Aug 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-09",
+        "label": "Sep 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-10",
+        "label": "Oct 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-11",
+        "label": "Nov 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2023-12",
+        "label": "Dec 2023",
+        "forecast": false
+      },
+      {
+        "ym": "2024-01",
+        "label": "Jan 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-02",
+        "label": "Feb 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-03",
+        "label": "Mar 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-04",
+        "label": "Apr 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-05",
+        "label": "May 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-06",
+        "label": "Jun 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-07",
+        "label": "Jul 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-08",
+        "label": "Aug 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-09",
+        "label": "Sep 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-10",
+        "label": "Oct 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-11",
+        "label": "Nov 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2024-12",
+        "label": "Dec 2024",
+        "forecast": false
+      },
+      {
+        "ym": "2025-01",
+        "label": "Jan 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-02",
+        "label": "Feb 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-03",
+        "label": "Mar 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-04",
+        "label": "Apr 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-05",
+        "label": "May 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-06",
+        "label": "Jun 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-07",
+        "label": "Jul 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-08",
+        "label": "Aug 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-09",
+        "label": "Sep 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-10",
+        "label": "Oct 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-11",
+        "label": "Nov 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2025-12",
+        "label": "Dec 2025",
+        "forecast": false
+      },
+      {
+        "ym": "2026-01",
+        "label": "Jan 2026",
+        "forecast": false
+      },
+      {
+        "ym": "2026-02",
+        "label": "Feb 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-03",
+        "label": "Mar 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-04",
+        "label": "Apr 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-05",
+        "label": "May 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-06",
+        "label": "Jun 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-07",
+        "label": "Jul 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-08",
+        "label": "Aug 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-09",
+        "label": "Sep 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-10",
+        "label": "Oct 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-11",
+        "label": "Nov 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2026-12",
+        "label": "Dec 2026",
+        "forecast": true
+      },
+      {
+        "ym": "2027-01",
+        "label": "Jan 2027",
+        "forecast": true
+      }
+    ],
+    "series": {
+      "msm": [
+        1.0,
+        3.0,
+        3.0,
+        3.0,
+        2.0,
+        6.0,
+        61.0,
+        51.0,
+        17.0,
+        38.0,
+        75.0,
+        304.0,
+        1413.0,
+        1756.0,
+        1544.0,
+        2427.0,
+        1732.0,
+        1557.0,
+        2995.0,
+        2376.0,
+        1684.0,
+        2733.0,
+        3394.0,
+        3515.0,
+        2279.0,
+        400.0,
+        342.0,
+        192.0,
+        230.0,
+        187.0,
+        209.0,
+        196.0,
+        236.0,
+        495.0,
+        1075.0,
+        779.0,
+        893.0,
+        749.2,
+        817.0,
+        660.5,
+        493.5,
+        583.3,
+        1088.3,
+        874.3,
+        645.7,
+        1088.7,
+        1514.7,
+        1532.7,
+        1146.5
+      ],
+      "pwid": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        336.0,
+        761.0,
+        207.0,
+        1976.0,
+        2736.0,
+        2006.0,
+        2233.0,
+        2879.0,
+        2825.0,
+        2795.0,
+        3009.0,
+        3010.0,
+        2371.0,
+        4240.0,
+        2703.0,
+        1103.0,
+        718.0,
+        159.0,
+        310.0,
+        204.0,
+        47.0,
+        785.0,
+        109.0,
+        916.0,
+        1349.0,
+        521.0,
+        378.0,
+        882.0,
+        1373.3,
+        938.7,
+        852.3,
+        1030.0,
+        1436.0,
+        1790.0,
+        1559.0,
+        1963.0,
+        1352.0,
+        1840.7,
+        1096.0,
+        1320.3
+      ],
+      "sw": [
+        371.0,
+        361.0,
+        224.0,
+        366.0,
+        257.0,
+        321.0,
+        589.0,
+        520.0,
+        3415.0,
+        945.0,
+        1601.0,
+        1538.0,
+        4926.0,
+        6222.0,
+        5403.0,
+        7014.0,
+        9517.0,
+        8900.0,
+        8256.0,
+        7898.0,
+        9487.0,
+        8906.0,
+        13300.0,
+        8066.0,
+        5293.0,
+        3087.0,
+        813.0,
+        314.0,
+        32.0,
+        11.0,
+        987.0,
+        854.0,
+        3534.0,
+        4377.0,
+        1999.0,
+        2957.0,
+        4707.0,
+        2764.5,
+        1672.5,
+        1923.8,
+        2452.0,
+        3077.3,
+        3277.3,
+        3090.7,
+        5478.7,
+        4742.7,
+        5633.3,
+        4187.0,
+        3824.2
+      ],
+      "tg": [
+        45.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        8.0,
+        213.0,
+        137.0,
+        223.0,
+        281.0,
+        244.0,
+        162.0,
+        313.0,
+        261.0,
+        560.0,
+        481.0,
+        533.0,
+        281.0,
+        322.0,
+        266.0,
+        199.0,
+        79.0,
+        104.0,
+        5.0,
+        162.0,
+        107.0,
+        618.0,
+        476.0,
+        215.0,
+        448.0,
+        366.0,
+        188.3,
+        300.3,
+        120.0,
+        124.0,
+        83.5,
+        237.5,
+        184.0,
+        589.0,
+        319.0,
+        374.0,
+        245.7,
+        236.5
+      ]
+    }
+  },
+  "socioeconomic": {
+    "national": {
+      "poverty_mpi_h": 40.9,
+      "literacy_access": 81.3
+    },
+    "states": {
+      "Abia": {
+        "poverty_mpi_h": 10.3,
+        "literacy_access": 96.9
+      },
+      "Adamawa": {
+        "poverty_mpi_h": 59.5,
+        "literacy_access": 75.5
+      },
+      "Akwa Ibom": {
+        "poverty_mpi_h": 22.5,
+        "literacy_access": 96.9
+      },
+      "Anambra": {
+        "poverty_mpi_h": 9.1,
+        "literacy_access": 98.2
+      },
+      "Bauchi": {
+        "poverty_mpi_h": 81.3,
+        "literacy_access": 47.4
+      },
+      "Bayelsa": {
+        "poverty_mpi_h": 23.5,
+        "literacy_access": 97.9
+      },
+      "Benue": {
+        "poverty_mpi_h": 39.7,
+        "literacy_access": 94.0
+      },
+      "Borno": {
+        "poverty_mpi_h": 63.6,
+        "literacy_access": 71.9
+      },
+      "Cross River": {
+        "poverty_mpi_h": 27.6,
+        "literacy_access": 94.6
+      },
+      "Delta": {
+        "poverty_mpi_h": 12.6,
+        "literacy_access": 97.1
+      },
+      "Ebonyi": {
+        "poverty_mpi_h": 38.6,
+        "literacy_access": 90.1
+      },
+      "Edo": {
+        "poverty_mpi_h": 5.5,
+        "literacy_access": 98.0
+      },
+      "Ekiti": {
+        "poverty_mpi_h": 13.7,
+        "literacy_access": 95.3
+      },
+      "Enugu": {
+        "poverty_mpi_h": 10.2,
+        "literacy_access": 95.6
+      },
+      "Federal Capital Territory": {
+        "poverty_mpi_h": 24.4,
+        "literacy_access": 94.5
+      },
+      "Gombe": {
+        "poverty_mpi_h": 77.1,
+        "literacy_access": 58.1
+      },
+      "Imo": {
+        "poverty_mpi_h": 9.5,
+        "literacy_access": 98.1
+      },
+      "Jigawa": {
+        "poverty_mpi_h": 83.2,
+        "literacy_access": 44.8
+      },
+      "Kaduna": {
+        "poverty_mpi_h": 56.2,
+        "literacy_access": 74.1
+      },
+      "Kano": {
+        "poverty_mpi_h": 68.6,
+        "literacy_access": 68.2
+      },
+      "Katsina": {
+        "poverty_mpi_h": 77.1,
+        "literacy_access": 58.5
+      },
+      "Kebbi": {
+        "poverty_mpi_h": 78.9,
+        "literacy_access": 51.2
+      },
+      "Kogi": {
+        "poverty_mpi_h": 31.9,
+        "literacy_access": 94.3
+      },
+      "Kwara": {
+        "poverty_mpi_h": 29.7,
+        "literacy_access": 79.7
+      },
+      "Lagos": {
+        "poverty_mpi_h": 2.3,
+        "literacy_access": 99.4
+      },
+      "Nasarawa": {
+        "poverty_mpi_h": 53.7,
+        "literacy_access": 85.8
+      },
+      "Niger": {
+        "poverty_mpi_h": 61.3,
+        "literacy_access": 65.0
+      },
+      "Ogun": {
+        "poverty_mpi_h": 12.9,
+        "literacy_access": 94.5
+      },
+      "Ondo": {
+        "poverty_mpi_h": 19.9,
+        "literacy_access": 93.5
+      },
+      "Osun": {
+        "poverty_mpi_h": 11.1,
+        "literacy_access": 95.8
+      },
+      "Oyo": {
+        "poverty_mpi_h": 21.4,
+        "literacy_access": 89.3
+      },
+      "Plateau": {
+        "poverty_mpi_h": 54.3,
+        "literacy_access": 86.4
+      },
+      "Rivers": {
+        "poverty_mpi_h": 7.2,
+        "literacy_access": 98.7
+      },
+      "Sokoto": {
+        "poverty_mpi_h": 85.7,
+        "literacy_access": 47.4
+      },
+      "Taraba": {
+        "poverty_mpi_h": 64.8,
+        "literacy_access": 78.2
+      },
+      "Yobe": {
+        "poverty_mpi_h": 81.0,
+        "literacy_access": 49.1
+      },
+      "Zamfara": {
+        "poverty_mpi_h": 82.2,
+        "literacy_access": 55.1
+      }
+    },
+    "survey_year": 2026
+  }
+}

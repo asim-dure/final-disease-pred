@@ -1,10 +1,27 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Area, XAxis, YAxis,
-  CartesianGrid, Tooltip, ReferenceArea, ReferenceLine,
+  CartesianGrid, Tooltip, ReferenceArea, ReferenceLine, BarChart, Bar, Cell,
 } from 'recharts'
 import { Card, InfoTip } from '../components'
-import { fmt, fmtFull, pct, COLORS, MONTHS, monthLabel, loadMM } from '../lib'
+import { fmt, fmtFull, pct, COLORS, MONTHS, monthLabel, loadMM, zoneFor } from '../lib'
+
+const BASE = import.meta.env.BASE_URL || '/'
+
+// TB carries no monthly national.json/states.json series (only 2 real annual
+// data points nationally -- see meta.forecast_unavailable_reason), so its one
+// real location-wise breakdown lives in burden.json's per-state snapshot
+// instead. Fetched locally here (Dashboard.jsx is disease-agnostic and this
+// is the only disease left routed through it) rather than widening useData's
+// shared fetch list for a single disease's own quirk.
+function useBurdenSnapshot(disease, variant) {
+  const [burden, setBurden] = useState(null)
+  useEffect(() => {
+    setBurden(null)
+    fetch(`${BASE}data/${variant}/${disease}/burden.json`).then(r => r.json()).then(setBurden).catch(() => setBurden({ states: {} }))
+  }, [disease, variant])
+  return burden
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Forecastive Dashboard — a predictive command centre that sits ABOVE the
@@ -115,11 +132,11 @@ function Metric({ label, value, sub, accent = COLORS.accent, info }) {
   )
 }
 
-const ChartTip = ({ active, payload, label, unit }) => {
+const ChartTip = ({ active, payload, label, unit, plain }) => {
   if (!active || !payload?.length) return null
   return (
     <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 13px', fontSize: '.8rem', boxShadow: '0 8px 30px rgba(15,34,48,.12)' }}>
-      <div style={{ color: 'var(--txt-0)', fontWeight: 700, marginBottom: 6 }}>{monthLabel(label)}</div>
+      <div style={{ color: 'var(--txt-0)', fontWeight: 700, marginBottom: 6 }}>{plain ? label : monthLabel(label)}</div>
       {payload.filter(p => p.value != null && p.name && !p.name.startsWith('_')).map((p, i) => (
         <div key={i} style={{ color: p.color, display: 'flex', justifyContent: 'space-between', gap: 16 }}>
           <span>{p.name}</span><span className="mono" style={{ fontWeight: 600 }}>{fmtFull(Array.isArray(p.value) ? p.value[1] : p.value)}{unit || ''}</span>
@@ -133,6 +150,11 @@ export default function Dashboard({ data, disease = 'malaria', label = 'Malaria'
   const { national, states, meta } = data
   const M = useForecastModel(national, states, meta)
   const chartRef = useRef(null)
+  const burdenSnap = useBurdenSnapshot(disease, variant)
+  const stateBar = useMemo(() => Object.entries(burdenSnap?.states || {})
+    .map(([name, v]) => ({ name, value: v.value, zone: zoneFor(disease, v.burden_score).name, color: zoneFor(disease, v.burden_score).color }))
+    .filter(r => r.value != null)
+    .sort((a, b) => (b.value || 0) - (a.value || 0)), [burdenSnap, disease])
 
   const [scope, setScope] = useState('National')
   const [metric, setMetric] = useState('cases')     // 'cases' | 'incidence'
@@ -249,6 +271,29 @@ export default function Dashboard({ data, disease = 'malaria', label = 'Malaria'
           sub={<span className="muted">{M.mape != null ? 'validation MAPE' : 'not benchmarked'}</span>}
           info="Mean absolute percentage error from back-testing the model on held-out recent data. Lower = tighter forecasts." />
       </div>
+
+      {/* ── CASES BY STATE — the one real location-wise breakdown this disease
+           has when there's no monthly national/state series to build a
+           trajectory from (see M.hasForecast banner above): the latest real
+           per-state snapshot from burden.json, big and full width. ── */}
+      {stateBar.length > 0 && (
+        <Card style={{ marginBottom: 18 }}
+          title={<span>{label} — by state (latest reported snapshot)
+            <InfoTip w={320} text="Every reporting state's real latest value, sorted highest to lowest. Bar colour = precomputed hotspot zone (case volume + trend, percentile-ranked), same scoring used everywhere else in this app." /></span>}
+          sub="Real reported value per state · colour = hotspot zone">
+          <ResponsiveContainer width="100%" height={420}>
+            <BarChart data={stateBar} margin={{ top: 4, right: 10, left: 4, bottom: 60 }}>
+              <CartesianGrid stroke={COLORS.grid} vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: COLORS.axis, fontSize: 10 }} axisLine={{ stroke: 'rgba(0,0,0,.08)' }} tickLine={false} interval={0} angle={-60} textAnchor="end" height={80} />
+              <YAxis tick={{ fill: COLORS.axis, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={fmt} width={48} />
+              <Tooltip content={<ChartTip plain />} />
+              <Bar dataKey="value" name={label} radius={[3, 3, 0, 0]}>
+                {stateBar.map((r, i) => <Cell key={i} fill={r.color} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
 
       {/* ── MAIN TRAJECTORY + SEASONAL CALENDAR ── */}
       <div className="row" style={{ alignItems: 'stretch' }} ref={chartRef}>

@@ -57,6 +57,11 @@ DISEASES = {
         # TB_CASE_PARTITION, generalized to "sum exactly these N Total-level
         # columns, never any disaggregated breakdown").
         "forecast_target": "HIV positive tests (HTS_TST_POS, NDARS Total Male+Female)",
+        # Short, non-technical label for UI surfaces (Comparative Benchmarking)
+        # that shouldn't show the full derived-series name -- HIV has exactly
+        # ONE real target, so those surfaces skip the dropdown entirely and
+        # just show this name directly.
+        "target_display_label": "HIV Cases",
         "forecast_target_components": [
             "HTS Monthly_1n_HTS_TST_POS Total, Male",
             "HTS Monthly_1n_HTS_TST_POS Total, Female",
@@ -65,18 +70,39 @@ DISEASES = {
         "forecastable": True, "tb_style_excluded": False,
         "time_grain_hotspot": "month", "time_grain_fact": "month",
         "has_score": True, "has_zone": False, "has_intervention_drivers": True,
-        # Real, verified-live warehouse indicators (see drivers_hiv.py) --
-        # NOT fabricated. ART coverage, linkage-to-care, and PMTCT testing
-        # volume are actually reported per LGA/month; elasticity direction
-        # and magnitude are literature-cited (WHO/UNAIDS Treatment-as-
-        # Prevention), exactly the same honesty bar as malaria's own
-        # NMEP/WHO-cited driver elasticities in drivers.py. Two of these
-        # three indicators had warehouse rows duplicated under an identical
-        # hashkey (~16x-66x inflation) -- fixed generically in
+        # Real, verified-live NDARS (system_id=7)-only warehouse indicators
+        # (see drivers_hiv.py) -- NOT fabricated. ART coverage, HTS testing
+        # volume, PMTCT testing volume and VL-monitoring are actually
+        # reported per LGA/month; elasticity direction and magnitude are
+        # literature-cited (WHO/UNAIDS Treatment-as-Prevention), exactly the
+        # same honesty bar as malaria's own NMEP/WHO-cited driver
+        # elasticities in drivers.py. Several of these indicators had
+        # warehouse rows duplicated under an identical hashkey (~16x-66x
+        # inflation) -- fixed generically in
         # etl_warehouse_common.fetch_fact_series() via a hashkey dedup, not
-        # patched around here.
-        "interventions": ["PLHIV currently on ART", "Newly enrolled in HIV care", "PMTCT testing volume"],
-        "elasticity": {"art": -0.30, "linkage": -0.20, "pmtct_testing": -0.15},
+        # patched around here. (A "linkage to care" driver was dropped: no
+        # clean NDARS-native "newly enrolled" indicator exists for the
+        # general population -- see drivers_hiv.py's module note.)
+        "interventions": ["PLHIV currently on ART", "HIV tests conducted (general population)", "PMTCT testing volume", "On ART with a VL result",
+                          "PrEP uptake -- MSM", "PrEP uptake -- PWID", "PrEP uptake -- Sex Workers", "PrEP uptake -- Transgender",
+                          "Poverty (MPI headcount)", "Literacy / schooling access"],
+        # msm/pwid/sw/tg elasticities are pre-scaled by each group's real,
+        # cited share of Nigeria's total PLHIV (audience-scoping baked into
+        # the coefficient itself, since /api/whatif's _intervention_mult has
+        # no separate audience parameter) -- see export_hiv_kp_socio.py for
+        # the audience-weight derivation (IBBSS 2020-21 prevalence x NACA
+        # 2023 KP population-size estimate, as a share of Nigeria's ~1.9M
+        # PLHIV): base elasticity -0.35 (targeted PrEP/outreach, WHO PrEP
+        # efficacy literature) x audience (msm 0.0789, pwid 0.0253, sw
+        # 0.0604, tg 0.0142). Poverty/literacy are gentler, indirect,
+        # population-wide socioeconomic drivers (OPHI/NBS MPI 2019) --
+        # higher poverty deprivation raises risk (positive elasticity),
+        # higher literacy/schooling access lowers it (negative), each at a
+        # deliberately modest +/-0.10 magnitude (directional, literature-
+        # informed, not a fitted coefficient -- disclosed as such in the UI).
+        "elasticity": {"art": -0.30, "hts_testing": -0.15, "pmtct_testing": -0.15, "vl_monitoring": -0.12,
+                       "msm": -0.0276, "pwid": -0.0089, "sw": -0.0211, "tg": -0.0050,
+                       "poverty": 0.10, "literacy": -0.10},
         "burden_tier": "volume_trend",
         "dataset_info": {
             "source": "public.fact_indicator_data_hiv (warehouse, NDARS system_id=7) + hiv_hotspot_predictions",
@@ -122,7 +148,11 @@ DISEASES = {
 
     "hypertension": {
         "label": "Hypertension", "group": "ncd", "source": "warehouse",
-        "hotspot_table": "hypertension_hotspot_predictions",
+        # Renamed live on the warehouse side since this was last verified --
+        # confirmed current name via information_schema.tables (every
+        # NCD/NTD hotspot table now carries a "hotspot_" prefix that didn't
+        # exist before).
+        "hotspot_table": "hotspot_hypertension_hotspot_predictions",
         "hotspot_cols": {
             "state": "State", "lga": "LGA", "year": "Year", "month": "Month",
             "score": "hypertension_risk_score", "zone": "prevalence_category",
@@ -155,14 +185,15 @@ DISEASES = {
             # interventions configured" / "budget needs unit costs, not yet
             # configured" (see api.py get_meta()/budget routes) rather than
             # fabricating driver data that doesn't exist for this disease.
-            "simulator": False, "whatiflab": True, "data_explorer": True,
+            "simulator": True, "whatiflab": True, "data_explorer": True,
             "methodology": False, "model_lab": False,
         },
     },
 
     "diabetes": {
         "label": "Diabetes", "group": "ncd", "source": "warehouse",
-        "hotspot_table": "diabetes_hotspot_predictions",
+        # Renamed live on the warehouse side (see hypertension's own comment).
+        "hotspot_table": "hotspot_diabetes_hotspot_predictions",
         "hotspot_cols": {
             "state": "State", "lga": "LGA", "year": "Year", "month": "Month",
             "score": "Risk_Score", "zone": "predicted_zone",
@@ -185,14 +216,15 @@ DISEASES = {
         },
         "capabilities": {
             "overview": False, "hotspot_map": True, "forecast": True,
-            "simulator": False, "whatiflab": True, "data_explorer": True,
+            "simulator": True, "whatiflab": True, "data_explorer": True,
             "methodology": False, "model_lab": False,
         },
     },
 
     "cervical_cancer": {
         "label": "Cervical Cancer", "group": "ncd", "source": "warehouse",
-        "hotspot_table": "cervical_cancer_hotspot",
+        # Renamed live on the warehouse side (see hypertension's own comment).
+        "hotspot_table": "hotspot_cervical_cancer_hotspot",
         "hotspot_cols": {
             "state": "State", "lga": "LGA", "year": "Year", "month": "Month",
             "score": "Leading_Hotspot_Score", "zone": "Predicted_Zone_Label",
@@ -214,18 +246,22 @@ DISEASES = {
         },
         "capabilities": {
             "overview": False, "hotspot_map": True, "forecast": True,
-            "simulator": False, "whatiflab": True, "data_explorer": True,
+            "simulator": True, "whatiflab": True, "data_explorer": True,
             "methodology": False, "model_lab": False,
         },
     },
 
     "sickle_cell": {
         "label": "Sickle Cell Disease", "group": "ntd", "source": "warehouse",
-        "hotspot_table": "sickle_cell_hotspots",
-        "hotspot_cols": {
-            "state": "State", "lga": "LGA", "year": "Year", "month": "Month",
-            "score": None, "zone": "Zone_Label", "value": "SCD_Total_Cases",
-        },
+        # The "sickle_cell_hotspots" table this used to point at no longer
+        # exists at all (verified live -- confirmed absent from
+        # information_schema.tables, unlike the other 6 NCD/NTD hotspot
+        # tables which were merely renamed with a "hotspot_" prefix). Falls
+        # back to the same fact-table-derived snapshot path the 5 newer
+        # diseases with no hotspot table use (see export_disease.py).
+        "hotspot_table": None,
+        "hotspot_cols": {"state": "state", "lga": "lga", "year": "year", "month": "month",
+                          "score": None, "zone": None, "value": "Sickle Cell disease new cases (suspected)"},
         # Correction vs. initial assumption: sickle cell facts live in the
         # ncd schema, NOT ntd (verified live -- 0 rows under ntd, 117,552
         # rows under ncd.fact_indicator_data, disease_name='Sickle Cell').
@@ -234,25 +270,26 @@ DISEASES = {
         "forecast_target": "Sickle Cell disease new cases (suspected)",
         "forecastable": True, "tb_style_excluded": False,
         "time_grain_hotspot": "month", "time_grain_fact": "month",
-        "has_score": False, "has_zone": True, "has_intervention_drivers": False,
+        "has_score": False, "has_zone": False, "has_intervention_drivers": False,
         "interventions": [], "elasticity": {},
         "burden_tier": "volume_trend",
         "dataset_info": {
-            "source": "sickle_cell_hotspots + public.fact_indicator_data_ncd (warehouse, disease_name='Sickle Cell')",
+            "source": "public.fact_indicator_data_ncd (warehouse, disease_name='Sickle Cell') -- no hotspot table exists any more",
             "coverage": "Reported under the ncd schema, not ntd, despite the NTD tab grouping (verified live: 0 rows under ntd, 117,552 rows under ncd for Sickle Cell)",
             "granularity": "117,552 fact rows",
-            "notes": "No risk score in the source hotspot table (has_score=False) -- areas are ranked by case volume, labelled 'Case Volume Rank' rather than implying a modelled risk score.",
+            "notes": "No hotspot-prediction table exists for this disease any more -- the hotspot map/snapshot is derived directly from the latest reported month's case volume per LGA (has_score=False, has_zone=False, ranked by volume only).",
         },
         "capabilities": {
             "overview": False, "hotspot_map": True, "forecast": True,
-            "simulator": False, "whatiflab": True, "data_explorer": True,
+            "simulator": True, "whatiflab": True, "data_explorer": True,
             "methodology": False, "model_lab": False,
         },
     },
 
     "asthma": {
         "label": "Asthma", "group": "ncd", "source": "warehouse",
-        "hotspot_table": "asthma_hotspot_predictions",
+        # Renamed live on the warehouse side (see hypertension's own comment).
+        "hotspot_table": "hotspot_asthma_hotspot_predictions",
         "hotspot_cols": {
             "state": "State", "lga": "LGA", "year": "year", "month": "month",
             "score": None, "zone": "predicted_zone_classifier",
@@ -274,14 +311,15 @@ DISEASES = {
         },
         "capabilities": {
             "overview": False, "hotspot_map": True, "forecast": True,
-            "simulator": False, "whatiflab": True, "data_explorer": True,
+            "simulator": True, "whatiflab": True, "data_explorer": True,
             "methodology": False, "model_lab": False,
         },
     },
 
     "yaws": {
         "label": "Yaws", "group": "ntd", "source": "warehouse",
-        "hotspot_table": "yaws_predictive_hotspot",
+        # Renamed live on the warehouse side (see hypertension's own comment).
+        "hotspot_table": "hotspot_yaws_predictive_hotspot",
         "hotspot_cols": {
             "state": "State", "lga": "LGA", "year": "Year", "month": "Month",
             "score": "Holistic_Risk_Score", "zone": "Predicted_Risk_Zone",
@@ -303,14 +341,15 @@ DISEASES = {
         },
         "capabilities": {
             "overview": False, "hotspot_map": True, "forecast": True,
-            "simulator": False, "whatiflab": True, "data_explorer": True,
+            "simulator": True, "whatiflab": True, "data_explorer": True,
             "methodology": False, "model_lab": False,
         },
     },
 
     "elephantiasis": {
         "label": "Elephantiasis (LF)", "group": "ntd", "source": "warehouse",
-        "hotspot_table": "elephantiasis_hotspot_predictions",
+        # Renamed live on the warehouse side (see hypertension's own comment).
+        "hotspot_table": "hotspot_elephantiasis_hotspot_predictions",
         "hotspot_cols": {
             "state": "State", "lga": "LGA", "year": "Year", "month": None,
             "score": None, "zone": None, "value": "Elephantiasis_Cases",
@@ -332,7 +371,145 @@ DISEASES = {
         },
         "capabilities": {
             "overview": False, "hotspot_map": True, "forecast": True,
-            "simulator": False, "whatiflab": True, "data_explorer": True,
+            "simulator": True, "whatiflab": True, "data_explorer": True,
+            "methodology": False, "model_lab": False,
+        },
+    },
+
+    # ── 5 more NCD/NTD diseases, real warehouse indicators verified live but
+    # with NO precomputed ML hotspot-prediction table (confirmed live:
+    # information_schema.tables has zero matches for any of these 5) --
+    # export_disease.py derives a snapshot directly from the fact-table data
+    # instead (see its own "no hotspot_table" branch). hotspot_cols below is
+    # therefore a placeholder describing the FACT indicator, not a real table
+    # column mapping -- hotspot_table is None so fetch_hotspot() is never
+    # called for these.
+    "arthritis": {
+        "label": "Arthritis", "group": "ncd", "source": "warehouse",
+        "hotspot_table": None,
+        "hotspot_cols": {"state": "state", "lga": "lga", "year": "year", "month": "month",
+                          "score": None, "zone": None, "value": "Arthritis new cases (suspected)"},
+        "fact_schema": "ncd",
+        # Verified live: 318,941 rows, 24,618 distinct geo locations, 2016-2026.
+        "forecast_target": "Arthritis new cases (suspected)",
+        "forecastable": True, "tb_style_excluded": False,
+        "time_grain_hotspot": "month", "time_grain_fact": "month",
+        "has_score": False, "has_zone": False, "has_intervention_drivers": False,
+        "interventions": [], "elasticity": {},
+        "burden_tier": "volume_trend",
+        "dataset_info": {
+            "source": "public.fact_indicator_data_ncd (warehouse) -- no bespoke hotspot table",
+            "coverage": "2016-2026 (monthly)",
+            "granularity": "318,941 fact rows across 24,618 distinct geo locations",
+            "notes": "No ML hotspot-prediction table exists for this disease -- the hotspot map/snapshot is derived directly from the latest reported month's case volume per LGA (has_score=False, has_zone=False, ranked by volume only, same 'volume_trend' formula every other score/zone-less disease uses).",
+        },
+        "capabilities": {
+            "overview": False, "hotspot_map": True, "forecast": True,
+            "simulator": True, "whatiflab": False, "data_explorer": True,
+            "methodology": False, "model_lab": False,
+        },
+    },
+
+    "depression": {
+        "label": "Depression", "group": "ncd", "source": "warehouse",
+        "hotspot_table": None,
+        "hotspot_cols": {"state": "state", "lga": "lga", "year": "year", "month": "month",
+                          "score": None, "zone": None, "value": "Depression new cases (suspected)"},
+        "fact_schema": "ncd",
+        # Verified live: 28,610 rows, 6,898 distinct geo locations, 2020-2026.
+        "forecast_target": "Depression new cases (suspected)",
+        "forecastable": True, "tb_style_excluded": False,
+        "time_grain_hotspot": "month", "time_grain_fact": "month",
+        "has_score": False, "has_zone": False, "has_intervention_drivers": False,
+        "interventions": [], "elasticity": {},
+        "burden_tier": "volume_trend",
+        "dataset_info": {
+            "source": "public.fact_indicator_data_ncd (warehouse) -- no bespoke hotspot table",
+            "coverage": "2020-2026 (monthly)",
+            "granularity": "28,610 fact rows across 6,898 distinct geo locations",
+            "notes": "No ML hotspot-prediction table exists for this disease -- snapshot derived directly from fact-table case volume, same as Arthritis above. Real published Nigeria-wide prevalence surveys for depression carry disputed data quality (see NCD_NTD_LEVER_RESEARCH.md) -- this dashboard's own case-report volume is the only per-LGA signal used.",
+        },
+        "capabilities": {
+            "overview": False, "hotspot_map": True, "forecast": True,
+            "simulator": True, "whatiflab": False, "data_explorer": True,
+            "methodology": False, "model_lab": False,
+        },
+    },
+
+    "breast_cancer": {
+        "label": "Breast Cancer", "group": "ncd", "source": "warehouse",
+        "hotspot_table": None,
+        "hotspot_cols": {"state": "state", "lga": "lga", "year": "year", "month": "month",
+                          "score": None, "zone": None, "value": "Breast Cancer new cases (suspected)"},
+        "fact_schema": "ncd",
+        # Verified live: 12,460 rows, 4,043 distinct geo locations, 2020-2026.
+        "forecast_target": "Breast Cancer new cases (suspected)",
+        "forecastable": True, "tb_style_excluded": False,
+        "time_grain_hotspot": "month", "time_grain_fact": "month",
+        "has_score": False, "has_zone": False, "has_intervention_drivers": False,
+        "interventions": [], "elasticity": {},
+        "burden_tier": "volume_trend",
+        "dataset_info": {
+            "source": "public.fact_indicator_data_ncd (warehouse) -- no bespoke hotspot table",
+            "coverage": "2020-2026 (monthly)",
+            "granularity": "12,460 fact rows across 4,043 distinct geo locations",
+            "notes": "No ML hotspot-prediction table exists for this disease -- snapshot derived directly from fact-table case volume, same as Arthritis above. Female-specific and Male-specific variants also exist in the warehouse (5,487 and 4 rows respectively) but are NOT summed in -- the Total variant used here is the primary reported indicator, same convention as every other disease in this file.",
+        },
+        "capabilities": {
+            "overview": False, "hotspot_map": True, "forecast": True,
+            "simulator": True, "whatiflab": False, "data_explorer": True,
+            "methodology": False, "model_lab": False,
+        },
+    },
+
+    "coronary_heart_disease": {
+        "label": "Coronary Heart Disease", "group": "ncd", "source": "warehouse",
+        "hotspot_table": None,
+        "hotspot_cols": {"state": "state", "lga": "lga", "year": "year", "month": "month",
+                          "score": None, "zone": None, "value": "New coronary heart disease"},
+        "fact_schema": "ncd",
+        # Verified live: 37,785 rows, 7,373 distinct geo locations, 2016-2025.
+        "forecast_target": "New coronary heart disease",
+        "forecastable": True, "tb_style_excluded": False,
+        "time_grain_hotspot": "month", "time_grain_fact": "month",
+        "has_score": False, "has_zone": False, "has_intervention_drivers": False,
+        "interventions": [], "elasticity": {},
+        "burden_tier": "volume_trend",
+        "dataset_info": {
+            "source": "public.fact_indicator_data_ncd (warehouse) -- no bespoke hotspot table",
+            "coverage": "2016-2025 (monthly)",
+            "granularity": "37,785 fact rows across 7,373 distinct geo locations",
+            "notes": "No ML hotspot-prediction table exists for this disease -- snapshot derived directly from fact-table case volume, same as Arthritis above.",
+        },
+        "capabilities": {
+            "overview": False, "hotspot_map": True, "forecast": True,
+            "simulator": True, "whatiflab": False, "data_explorer": True,
+            "methodology": False, "model_lab": False,
+        },
+    },
+
+    "snake_bites": {
+        "label": "Snake Bites", "group": "ntd", "source": "warehouse",
+        "hotspot_table": None,
+        "hotspot_cols": {"state": "state", "lga": "lga", "year": "year", "month": "month",
+                          "score": None, "zone": None, "value": "Snake bites new cases"},
+        "fact_schema": "ntd",
+        # Verified live: 32,146 rows, 9,854 distinct geo locations, 2016-2026.
+        "forecast_target": "Snake bites new cases",
+        "forecastable": True, "tb_style_excluded": False,
+        "time_grain_hotspot": "month", "time_grain_fact": "month",
+        "has_score": False, "has_zone": False, "has_intervention_drivers": False,
+        "interventions": [], "elasticity": {},
+        "burden_tier": "volume_trend",
+        "dataset_info": {
+            "source": "public.fact_indicator_data_ntd (warehouse) -- no bespoke hotspot table",
+            "coverage": "2016-2026 (monthly)",
+            "granularity": "32,146 fact rows across 9,854 distinct geo locations",
+            "notes": "No ML hotspot-prediction table exists for this disease -- snapshot derived directly from fact-table case volume, same as Arthritis above.",
+        },
+        "capabilities": {
+            "overview": False, "hotspot_map": True, "forecast": True,
+            "simulator": True, "whatiflab": False, "data_explorer": True,
             "methodology": False, "model_lab": False,
         },
     },

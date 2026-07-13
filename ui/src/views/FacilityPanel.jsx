@@ -255,7 +255,7 @@ export default function FacilityPanel({ disease, stateName, lga, selMonth, lgaBu
       )}
 
       {data && data.available && facilities.length === 0 && (
-        <div className="muted" style={{ padding: 20, textAlign: 'center' }}>No facility-level records found for this LGA.</div>
+        <div className="muted" style={{ padding: 20, textAlign: 'center' }}>{data.note || 'No facility-level records found for this LGA.'}</div>
       )}
 
       {data && data.available && facilities.length > 0 && (

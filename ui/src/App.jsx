@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useData, API_BASE } from './lib'
 import Overview from './views/Overview'
 import GeoExplorer from './views/GeoExplorer'
@@ -13,6 +13,10 @@ import DataNotes from './views/DataNotes'
 import Benchmarking from './views/Benchmarking'
 import Dashboard from './views/Dashboard'
 import ManagerDashboard from './views/ManagerDashboard'
+import HivManagerDashboard from './views/HivManagerDashboard'
+import HivWhatIfBudget from './views/HivWhatIfBudget'
+import ThinDiseaseDashboard from './views/ThinDiseaseDashboard'
+import { useTheme, ThemeToggle } from './theme'
 
 // Minister-facing top nav: two plain-language groups always visible, plus a
 // "Deep Dive" dropdown for technical/model-internals sections, collapsed by default.
@@ -40,15 +44,18 @@ function buildNavGroups(label, caps, disease) {
   // redundant. The route + component still exist below (App.jsx's view==='visuallga'
   // branch), just not linked from the top nav.
 
-  // For malaria, What If Simulation / What-If Simulator / What-If Lab are ONE
-  // tab (per user request) -- levers, map, trend chart, and Budget Planning
-  // (the SARIMAX feature simulator + budget optimiser) all live inside
-  // VisualOverview now, so those nav entries are dropped instead of pointing
-  // at duplicate/dead pages. Other diseases (e.g. HIV) still use the
-  // standalone Simulator/WhatIfLab components unchanged, since they don't get
-  // the malaria-only merged view.
+  // What If Simulation is ONE tab for every disease that has real levers to
+  // show -- malaria (VisualOverview's own malaria branch) and HIV
+  // (HivWhatIfBudget) each have their own bespoke merged view; every other
+  // disease with a real drivers.json (all 12 NCD/NTD diseases -- see
+  // export_ncd_ntd_drivers.py) now gets the SAME map+levers+chart merged
+  // into StaticZoneMap (VisualOverview.jsx), not a separate tab. TB is the
+  // only disease left with no merge (no monthly grain, no drivers.json), so
+  // it's the only one that would ever see these as separate items -- and
+  // its own capabilities.simulator/whatiflab are already False, so in
+  // practice this renders nothing extra for anyone today.
   const interventionItems = []
-  if (disease !== 'malaria') {
+  if (disease === 'tb') {
     if (caps.simulator) interventionItems.push({ id: 'simulator', label: 'What-If Simulator', ico: '🎛️' })
     if (caps.whatiflab) interventionItems.push({ id: 'whatiflab', label: 'Budget Planning', ico: '🔬' })
   }
@@ -65,17 +72,17 @@ function buildNavGroups(label, caps, disease) {
 }
 
 function buildDeepDiveItems(caps, disease) {
+  // Deep Dive is malaria-only for now: every other disease's Deep Dive items
+  // route to pages that were never actually built out for non-malaria data
+  // (e.g. Data Explorer gets stuck on "Loading dataset…" for TB -- a broken/
+  // invalid-JSON response, not a UI issue) -- confirmed not navigable, so
+  // the menu is hidden entirely rather than offering links that don't work.
+  if (disease !== 'malaria') return []
   const items = []
   if (caps.overview) items.push({ id: 'overview', label: 'National Overview (ML experiments)', ico: '📊' })
   if (caps.model_lab) items.push({ id: 'modellab', label: 'Model Lab', ico: '🧪' })
   if (caps.data_explorer) items.push({ id: 'data', label: 'Data Explorer', ico: '🗄️' })
   if (caps.methodology) items.push({ id: 'method', label: 'Model & Methodology', ico: '🧬' })
-  // every disease except malaria (and, for the full lever panel, HIV's own
-  // Simulator tab) has no driver/intervention dataset in the warehouse, so
-  // the hotspot map can't show a live "Intervention levers" panel the way
-  // malaria's does -- this note explains why, instead of leaving the gap
-  // unexplained.
-  if (disease !== 'malaria') items.push({ id: 'datanotes', label: "About this disease's data", ico: 'ℹ️' })
   return items
 }
 
@@ -94,8 +101,30 @@ const GROUP_ICONS = { malaria: '🦟', hiv: '🩸', tb: '🫁', ncd: '🩺', ntd
 // disease switcher entirely (single-disease embed); ?embedded=1&group=ncd|ntd
 // restricts the switcher to diseases in that group instead of hiding it
 // outright, since NCD/NTD are umbrella sections covering several diseases.
-const KNOWN_DISEASE_IDS = ['malaria', 'hiv', 'tb', 'hypertension', 'diabetes', 'cervical_cancer', 'sickle_cell', 'asthma', 'yaws', 'elephantiasis']
+const KNOWN_DISEASE_IDS = [
+  'malaria', 'hiv', 'tb', 'hypertension', 'diabetes', 'cervical_cancer', 'sickle_cell', 'asthma', 'yaws', 'elephantiasis',
+  'arthritis', 'depression', 'breast_cancer', 'coronary_heart_disease', 'snake_bites',
+]
+// The 12 NCD/NTD diseases -- every KNOWN_DISEASE_IDS entry except malaria/
+// hiv/tb -- share the same single-indicator ThinDiseaseDashboard Command
+// Overview (sidebar shell + one real case-count target vs time/location +
+// population/density), per the explicit correction that these must reuse
+// malaria/HIV's dashboard shell, not a flat forecast-only page.
+const THIN_DISEASE_IDS = new Set(KNOWN_DISEASE_IDS.filter(d => !['malaria', 'hiv', 'tb'].includes(d)))
 const GROUP_DEFAULT_DISEASE = { ncd: 'hypertension', ntd: 'sickle_cell' }
+// TB is HIDDEN (not deleted) from the top-level tab bar: it lacks enough
+// real data to show anything useful (only 2 annual data points nationally --
+// no forecast, no Comparative Benchmarking, no Deep Dive). All of TB's own
+// config/routes/components are left completely intact -- ?disease=tb still
+// works directly (e.g. for an embed) -- this only removes its button from
+// the disease switcher itself. Revert by removing 'tb' from this set.
+const HIDDEN_TOP_TABS = new Set(['tb'])
+// Diseases whose top-level tab is a whole GROUP (NCD / NTD), not the disease
+// itself -- clicking the group tab shows a second row of sub-tabs, one per
+// disease in that group, instead of the group being a disease you can view
+// directly. malaria/hiv/tb keep their own individual top-level tabs.
+const GROUPED_TABS = new Set(['ncd', 'ntd'])
+const GROUP_TAB_LABEL = { ncd: 'NCD', ntd: 'NTD' }
 
 function readEmbedParams() {
   if (typeof window === 'undefined') return { urlDisease: null, embedded: false, embedGroup: null }
@@ -113,6 +142,7 @@ export default function App() {
     : (embedGroup && GROUP_DEFAULT_DISEASE[embedGroup]) ? GROUP_DEFAULT_DISEASE[embedGroup]
     : 'malaria'
 
+  const [theme, setTheme] = useTheme()
   const [diseases, setDiseases] = useState(null)
   const [disease, setDisease] = useState(initialDisease)
   const [view, setView] = useState('visual')
@@ -141,6 +171,40 @@ export default function App() {
 
   const selectDisease = (id) => { setDisease(id); setView('visual') }
 
+  // Top-level tab bar: malaria/hiv/tb are their own tab; every ncd/ntd
+  // disease collapses into ONE "NCD"/"NTD" group tab, with a second row of
+  // per-disease sub-tabs shown underneath once that group is active (built
+  // from the live /ews/api/diseases list, so a new disease added to
+  // disease_config.py appears automatically, no UI change needed).
+  const topLevelTabs = useMemo(() => {
+    if (!diseases) return []
+    const seenGroup = new Set()
+    const out = []
+    for (const d of diseases) {
+      if (HIDDEN_TOP_TABS.has(d.id)) continue
+      if (GROUPED_TABS.has(d.group)) {
+        if (seenGroup.has(d.group)) continue
+        seenGroup.add(d.group)
+        out.push({ id: d.group, label: GROUP_TAB_LABEL[d.group], isGroup: true })
+      } else {
+        out.push({ id: d.id, label: d.label, isGroup: false })
+      }
+    }
+    return out
+  }, [diseases])
+  const activeGroup = GROUPED_TABS.has(activeCfg?.group) ? activeCfg.group : null
+  const activeTopTabId = activeGroup || disease
+  const groupDiseases = (grp) => (diseases || []).filter(d => d.group === grp)
+  const selectTopTab = (tab) => {
+    if (tab.isGroup) {
+      // already inside this group -> leave the current disease selection
+      // alone (just re-affirms the tab); otherwise jump to its default disease
+      if (activeGroup !== tab.id) selectDisease(GROUP_DEFAULT_DISEASE[tab.id])
+    } else {
+      selectDisease(tab.id)
+    }
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -149,20 +213,47 @@ export default function App() {
             <span className="logo">{GROUP_ICONS[activeCfg?.group] || '🦟'}</span>
             <div>
               {!embedded && <h1>{label} Risk Intelligence</h1>}
-              <div className="sub">Nigeria · DHIS2</div>
+              <div className="sub">Nigeria · DHIS2 <ThemeToggle theme={theme} setTheme={setTheme} /></div>
             </div>
           </div>
 
           {diseases && diseases.length > 1 && !(embedded && !embedGroup) && (
-            <div className="disease-tabs">
-              {diseases
-                .filter(d => !(embedded && embedGroup) || d.group === embedGroup)
-                .map(d => (
-                  <button key={d.id} className={`disease-tab ${disease === d.id ? 'active' : ''}`}
-                    onClick={() => selectDisease(d.id)} title={d.label}>
-                    {d.label}
-                  </button>
-                ))}
+            <div>
+              {/* Embedding a specific group (?embedded=1&group=ncd|ntd) skips
+                  straight to that group's own disease sub-tabs -- there's no
+                  need for a single "NCD"/"NTD" top-level tab when the embed
+                  is already scoped to just that group. */}
+              {embedded && embedGroup ? (
+                <div className="disease-subtabs">
+                  {groupDiseases(embedGroup).map(d => (
+                    <button key={d.id} className={`disease-subtab ${disease === d.id ? 'active' : ''}`}
+                      onClick={() => selectDisease(d.id)} title={d.label}>
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="disease-tabs">
+                    {topLevelTabs.map(t => (
+                      <button key={t.id} className={`disease-tab ${activeTopTabId === t.id ? 'active' : ''}`}
+                        onClick={() => selectTopTab(t)} title={t.label}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  {activeGroup && (
+                    <div className="disease-subtabs">
+                      {groupDiseases(activeGroup).map(d => (
+                        <button key={d.id} className={`disease-subtab ${disease === d.id ? 'active' : ''}`}
+                          onClick={() => selectDisease(d.id)} title={d.label}>
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -181,14 +272,20 @@ export default function App() {
         </nav>
       </header>
 
-      <main className={view === 'dashboard' && disease === 'malaria' ? 'main main--full' : 'main'}>
+      <main className={view === 'dashboard' && (disease === 'malaria' || disease === 'hiv') ? 'main main--full' : 'main'}>
         {err && <div className="loading" style={{ color: 'var(--coral)' }}>Failed to load data: {err}</div>}
         {!data && !err && <div className="loading"><div className="spinner" />Loading data…</div>}
         {data && view === 'dashboard' && (disease === 'malaria'
           ? <ManagerDashboard data={data} variant={variant} disease={disease} />
+          : disease === 'hiv'
+          ? <HivManagerDashboard />
+          : THIN_DISEASE_IDS.has(disease)
+          ? <ThinDiseaseDashboard disease={disease} label={label} variant={variant} />
           : <Dashboard data={data} variant={variant} disease={disease} label={label} />)}
         {data && view === 'overview' && <Overview data={data} variant={variant} disease={disease} />}
-        {data && view === 'visual' && <VisualOverview data={data} variant={variant} disease={disease} deepDiveItems={deepDiveItems} activeView={view} onNavigate={setView} />}
+        {data && view === 'visual' && (disease === 'hiv'
+          ? <HivWhatIfBudget />
+          : <VisualOverview data={data} variant={variant} disease={disease} deepDiveItems={deepDiveItems} activeView={view} onNavigate={setView} />)}
         {data && view === 'visuallga' && <VisualOverview data={data} variant={variant} allLgas disease={disease} deepDiveItems={deepDiveItems} activeView={view} onNavigate={setView} />}
         {data && view === 'geo' && <GeoExplorer data={data} variant={variant} disease={disease} />}
         {data && view === 'forecast' && <Forecast data={data} variant={variant} disease={disease} />}

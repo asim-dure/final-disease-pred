@@ -2,31 +2,37 @@
 HIV's real, warehouse-backed driver layer for the What-If Simulator --
 ui/public/data/after/hiv/drivers.json, same shape drivers.py already
 produces for malaria (meta / national / states / lgas / national_traj /
-state_traj), consumed unmodified by Simulator.jsx.
+state_traj), consumed by the HIV What-If & Budget tab.
 
-Every driver below is an ACTUAL reported HIV programmatic indicator
-(verified live against hiv.fact_indicator_data + dim_indicator_master --
-see _tmp_check_drivers.py's output during implementation: each name maps
-to exactly ONE (system_id, indicator_name) pair, current through 2026-05,
-reported across 580-790 LGAs). No fabricated indicator is invented --
-this mirrors the no-fabrication rule already applied to HIV's forecast
-target. What IS a literature-based judgment call (same as malaria's own
-NMEP/WHO-cited elasticities in drivers.py) is the *magnitude/direction* of
-each driver's effect on future HTS_TST_POS, since the warehouse has no
-randomized/causal study to fit an elasticity from directly:
+STANDING CONSTRAINT (explicit user instruction, applies to all HIV data
+work in this build): NDARS (system_id=7) ONLY, no cross-system mixing.
+This file was originally built sourcing "art" and "linkage" from NHMIS
+(system_id=1) -- that violated the constraint and is fixed here: "art" now
+uses the NDARS-native "ART Monthly_3_Currently on ART" indicator (the same
+one export_burden_hiv.py already uses for the burden score), and "linkage"
+is dropped entirely -- verified live there is no clean NDARS-native
+"newly enrolled in care" (all-population) indicator; the only "newly
+initiated on ART" rows under system_id=7 are scoped to TB-co-infected
+patients only (ART Monthly_14a, "...on ART and TB"), a materially
+different population that would misrepresent general linkage-to-care.
+Two NEW real NDARS drivers replace it / round out Treatment & Care and
+Testing & Case-Finding:
 
-  - ART coverage ("currently receiving ART"): WHO/UNAIDS "Treatment as
-    Prevention" -- sustained viral suppression on ART cuts onward
+  - ART coverage ("currently receiving ART", NDARS): WHO/UNAIDS "Treatment
+    as Prevention" -- sustained viral suppression on ART cuts onward
     transmission. Strongest protective driver (elasticity -0.30).
-  - Linkage to care ("newly enrolled in clinical care"): earlier
-    enrollment -> earlier ART start -> shorter window of high
-    infectiousness. Protective (elasticity -0.20).
-  - PMTCT testing volume (pregnant/breastfeeding women tested): more
+  - HTS testing volume (general-population HIV testing, NDARS): more
     case-finding -> more linkage to treatment -> protective, same
     "testing reduces future transmission" logic malaria's RDT-testing
-    driver already uses (elasticity -0.15, deliberately the gentlest of
-    the three since the effect is one step further removed from the
-    outcome -- finding cases doesn't itself treat them).
+    driver already uses (elasticity -0.15).
+  - PMTCT testing volume (pregnant/breastfeeding women tested, NDARS):
+    same case-finding logic, narrower audience (elasticity -0.15).
+  - VL-monitoring ("currently on ART with a VL result", NDARS): routine
+    viral-load monitoring catches treatment failure/non-suppression early,
+    before it becomes a transmission risk again -- WHO consolidated
+    guidelines cite VL monitoring as core to sustained viral suppression.
+    Gentler than ART itself since it's one step removed from the outcome
+    (elasticity -0.12).
 
 Indicators considered but excluded for staleness (verified, not silently
 dropped): "Individuals HIV counseled, tested and received results" and
@@ -38,6 +44,8 @@ import json
 import os
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
+load_dotenv()
 
 import etl_warehouse_common as ewc
 
@@ -48,16 +56,22 @@ FC_YEARS_AHEAD = 24  # months of forecast trajectory to export for the driver-ou
 
 DRIVER_META = {
     "art": {
-        "indicator": "ART PLHIV currently receiving ART during the month (All regimen)",
-        "system_id": 1,  # NHMIS
+        "indicator": ["ART Monthly_3_Currently on ART Female", "ART Monthly_3_Currently on ART Male\xa0"],
+        "system_id": 7,  # NDARS -- fixed from NHMIS (see module note above)
         "label": "PLHIV currently on ART", "unit": "/mo", "agg": "sum",
         "cat": "Treatment & Care", "elasticity": -0.30, "good": "down",
     },
-    "linkage": {
-        "indicator": "ART HIV-positive people newly enrolled in clinical care during the month",
-        "system_id": 1,  # NHMIS
-        "label": "Newly enrolled in HIV care", "unit": "/mo", "agg": "sum",
-        "cat": "Treatment & Care", "elasticity": -0.20, "good": "down",
+    "vl_monitoring": {
+        "indicator": ["ART Monthly_6a_Currently on ART with VL result Female", "ART Monthly_6a_Currently on ART with VL result Male"],
+        "system_id": 7,  # NDARS
+        "label": "On ART with a VL result", "unit": "/mo", "agg": "sum",
+        "cat": "Treatment & Care", "elasticity": -0.12, "good": "down",
+    },
+    "hts_testing": {
+        "indicator": ["HTS Monthly_1n_HTS_TST Total, Male", "HTS Monthly_1n_HTS_TST Total, Female"],
+        "system_id": 7,  # NDARS
+        "label": "HIV tests conducted (general population)", "unit": "/mo", "agg": "sum",
+        "cat": "Testing & Case-Finding", "elasticity": -0.15, "good": "down",
     },
     "pmtct_testing": {
         "indicator": "PMTCT_HTS_Total. Number of pregnant & Breast-feeding women HIV tested and received results (Incl. known Positive)",

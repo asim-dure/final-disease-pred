@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { scoreDetail, buildZones } from '../burdenScore'
 import { lgaKeyFor } from '../lgaAlias'
-import { BLANK_MAP_STYLE } from '../mapStyle'
+import { blankMapStyle } from '../mapStyle'
 
 // ────────────────────────────────────────────────────────────────────────────
 // "MalariaIQ" command console — visual design supplied by the FMOH programme
@@ -31,10 +31,16 @@ import { BLANK_MAP_STYLE } from '../mapStyle'
 const BASE = import.meta.env.BASE_URL || '/'
 
 /* ============================== DESIGN TOKENS (light) ============================== */
-const C = {
-  bg: '#f6f8fb', panel: '#ffffff', panelAlt: '#f1f5f9', panel2: '#f8fafc',
-  border: '#e6ebf1', borderLight: '#cbd5e1', text: '#0f2230', textDim: '#51637a',
-  textFaint: '#8496ad', teal: '#0d9488', tealLight: '#0e8a80', azure: '#2563eb',
+// Structural surface/text tokens point at the SAME var(--miq-*) CSS custom
+// properties styles.css defines for :root and :root[data-theme='dark'] --
+// this is the one place that needs to change for every miq-root command-
+// centre dashboard (malaria, HIV, every NCD/NTD disease all import this same
+// C) to flip between Light and Dark. Brand/accent/zone colours below stay
+// static hex in both themes on purpose -- see styles.css's --miq-* comment.
+export const C = {
+  bg: 'var(--miq-bg)', panel: 'var(--miq-panel)', panelAlt: 'var(--miq-panel-alt)', panel2: 'var(--miq-panel-2)',
+  border: 'var(--miq-border)', borderLight: 'var(--miq-border-light)', text: 'var(--miq-text)', textDim: 'var(--miq-text-dim)',
+  textFaint: 'var(--miq-text-faint)', teal: '#0d9488', tealLight: '#0e8a80', azure: '#2563eb',
   red: '#dc2626', amber: '#d97706', yellow: '#ca8a04', green: '#16a34a', purple: '#7c3aed',
   // Lighter, softer variants used specifically for chart series (lines/bars/
   // areas/funnel) -- kept SEPARATE from the tokens above so zone colours
@@ -47,14 +53,14 @@ const C = {
 const INK = '#0f2230'   // dark text placed ON a coloured shape (map node, treemap cell)
 // Zone keys match ../burdenScore's scoreToZone() output EXACTLY -- no lowercase
 // re-keying, so a state's `dominant`/`zone` string can be used directly here.
-const ZONE_ORDER = ['Red', 'Amber', 'Yellow', 'Green', 'Not a Hotspot']
-const ZONE_COLORS = { 'Red': C.red, 'Amber': C.amber, 'Yellow': C.yellow, 'Green': C.green, 'Not a Hotspot': '#64748b' }
-const ZONE_LABELS = { 'Red': 'Red Zone', 'Amber': 'Amber Zone', 'Yellow': 'Yellow Zone', 'Green': 'Green Zone', 'Not a Hotspot': 'Not a Hotspot' }
+export const ZONE_ORDER = ['Red', 'Amber', 'Yellow', 'Green', 'Not a Hotspot']
+export const ZONE_COLORS = { 'Red': C.red, 'Amber': C.amber, 'Yellow': C.yellow, 'Green': C.green, 'Not a Hotspot': '#64748b' }
+export const ZONE_LABELS = { 'Red': 'Red Zone', 'Amber': 'Amber Zone', 'Yellow': 'Yellow Zone', 'Green': 'Green Zone', 'Not a Hotspot': 'Not a Hotspot' }
 const REGION_COLORS = { NW: '#38BDF8', NC: '#818CF8', NE: '#A78BFA', SW: '#F472B6', SE: '#FB923C', SS: '#34D399' }
 
 // Static geography only (hex-grid layout + geopolitical zone) — not data.
 // `key` is how the name appears in burden.json; `name`/`code` are display-only.
-const STATE_GRID = [
+export const STATE_GRID = [
   { name: 'Sokoto', key: 'Sokoto', code: 'SK', region: 'NW', col: 2, row: 0 },
   { name: 'Kebbi', key: 'Kebbi', code: 'KB', region: 'NW', col: 1, row: 1 },
   { name: 'Zamfara', key: 'Zamfara', code: 'ZM', region: 'NW', col: 3, row: 1 },
@@ -93,7 +99,7 @@ const STATE_GRID = [
   { name: 'Akwa Ibom', key: 'Akwa Ibom', code: 'AK', region: 'SS', col: 5, row: 8 },
   { name: 'Cross River', key: 'Cross River', code: 'CR', region: 'SS', col: 6, row: 7 },
 ]
-const REGIONS_META = [
+export const REGIONS_META = [
   { code: 'NW', name: 'North West' }, { code: 'NC', name: 'North Central' },
   { code: 'NE', name: 'North East' }, { code: 'SW', name: 'South West' },
   { code: 'SE', name: 'South East' }, { code: 'SS', name: 'South South' },
@@ -101,7 +107,7 @@ const REGIONS_META = [
 const FIELD_KEYS = ['cases', 'total', 'trend', 'fever_testing', 'act', 'treated', 'rain', 'temp', 'hum', 'itn', 'llin', 'ipt_cov']
 
 /* ============================== HELPERS ============================== */
-function fmt(n, opts = {}) {
+export function fmt(n, opts = {}) {
   if (n == null || isNaN(n)) return '—'
   if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(opts.d ?? 1) + 'M'
   if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(opts.d ?? 1) + 'K'
@@ -125,7 +131,7 @@ function sum(a) { return a.filter(x => x != null && !isNaN(x)).reduce((s, x) => 
 // solid and the forecast portion dashed. The last actual month is duplicated
 // into BOTH fields (the "connector") so the dashed segment starts exactly
 // where the solid one ends, instead of leaving a visible gap.
-function withForecastSplit(series, keys) {
+export function withForecastSplit(series, keys) {
   const firstForecastIdx = series.findIndex(d => d.forecast)
   return series.map((d, i) => {
     const isConnector = firstForecastIdx > 0 && i === firstForecastIdx - 1
@@ -153,7 +159,7 @@ function rowFrom(b, m, i) {
   }
 }
 // Every LGA name (sorted) that burden.lgas actually has data for, within one state.
-function lgaNamesForState(burden, stateName) {
+export function lgaNamesForState(burden, stateName) {
   if (!burden?.lgas || !stateName || stateName === 'All') return []
   const prefix = `${stateName}|||`
   return Object.keys(burden.lgas).filter(k => k.startsWith(prefix)).map(k => k.slice(prefix.length)).sort()
@@ -176,7 +182,7 @@ function buildUnitsAt(store, idx) {
 // escapes that clipping entirely, and the position is computed from the
 // icon's real screen coordinates (clamped to stay on-screen) so it never
 // overflows the viewport either.
-function MiqInfoTip({ text, title, w = 270 }) {
+export function MiqInfoTip({ text, title, w = 270 }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState(null)
   const ref = useRef(null)
@@ -207,7 +213,7 @@ function MiqInfoTip({ text, title, w = 270 }) {
     </span>
   )
 }
-function Card({ title, icon: Icon, tag, right, info, children, style, bodyStyle }) {
+export function Card({ title, icon: Icon, tag, right, info, children, style, bodyStyle }) {
   return (
     <div className="card" style={style}>
       {title && (
@@ -224,7 +230,7 @@ function Card({ title, icon: Icon, tag, right, info, children, style, bodyStyle 
     </div>
   )
 }
-function KPICard({ label, value, delta, deltaGood, icon: Icon, accent, deltaLabel }) {
+export function KPICard({ label, value, delta, deltaGood, icon: Icon, accent, deltaLabel }) {
   const hasDelta = delta !== undefined && delta !== null
   const up = hasDelta && delta >= 0
   const goodColor = deltaGood ? C.green : C.red
@@ -257,7 +263,7 @@ function ZoneLegend({ compact }) {
     </div>
   )
 }
-function CustomTooltip({ active, payload, label, suffix }) {
+export function CustomTooltip({ active, payload, label, suffix }) {
   if (!active || !payload || !payload.length) return null
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.borderLight}`, borderRadius: 8, padding: '8px 12px', fontSize: 12, boxShadow: '0 8px 24px rgba(15,34,48,0.14)' }}>
@@ -271,7 +277,7 @@ function CustomTooltip({ active, payload, label, suffix }) {
     </div>
   )
 }
-function Select({ value, onChange, options, label }) {
+export function Select({ value, onChange, options, label }) {
   return (
     <label className="selectWrap">
       <span className="selectLabel">{label}</span>
@@ -293,7 +299,7 @@ function Select({ value, onChange, options, label }) {
 // location at a time) and closes the panel. Uses the same fixed-position
 // createPortal pattern as MiqInfoTip above so the panel escapes the
 // scrolling/`overflow:hidden` dashboard shell instead of getting clipped.
-function Box({ checked }) {
+export function Box({ checked }) {
   return (
     <span style={{
       width: 13, height: 13, borderRadius: 3, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -308,7 +314,7 @@ function Box({ checked }) {
 // without the tree/expand levels -- used for YEARS and MONTHS so the topbar
 // shows one compact trigger each instead of a permanently-open row of chips
 // (which got unmanageable once MONTHS could show up to 51 options at once).
-function MultiSelectDropdown({ label, options, selected, onToggle, onClear, searchable, minWidth = 90 }) {
+export function MultiSelectDropdown({ label, options, selected, onToggle, onClear, searchable, minWidth = 90 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [pos, setPos] = useState(null)
@@ -368,7 +374,7 @@ function MultiSelectDropdown({ label, options, selected, onToggle, onClear, sear
     </label>
   )
 }
-function LocationTreeFilter({ filters, setFilters, burden }) {
+export function LocationTreeFilter({ filters, setFilters, burden }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [expZones, setExpZones] = useState(() => new Set())
@@ -511,6 +517,12 @@ function LocationTreeFilter({ filters, setFilters, burden }) {
 const ZONE_FILL_RGB = {
   'Red': [220, 38, 38], 'Amber': [217, 119, 6], 'Yellow': [202, 138, 4],
   'Green': [22, 163, 74], 'Not a Hotspot': [100, 116, 139],
+  // HIV-only: areas with zero real reported rows this month (see
+  // hivBuildZones' no-data exclusion) -- deliberately a lighter, flatter
+  // grey than 'Not a Hotspot' so an unscored gap doesn't visually read as
+  // "confirmed low risk." Malaria never produces this zone value, so this
+  // entry is inert for malaria's own map.
+  'No Data': [203, 213, 225],
 }
 const RISKMAP_NIGERIA_VIEW = { longitude: 8.7, latitude: 9.3, zoom: 5.0, pitch: 0, bearing: 0 }
 
@@ -519,10 +531,17 @@ const RISKMAP_NIGERIA_VIEW = { longitude: 8.7, latitude: 9.3, zoom: 5.0, pitch: 
 // actual geography instead of a stylised node graph. Clicking a state or LGA
 // highlights it and drives the SAME filters.locations/filters.lgas the rest
 // of this dashboard already reacts to.
-function RiskMap({ points, lgaZones, selected, selectedLga, onSelect, onSelectLga, categoryFilter, regionFilter }) {
+export function RiskMap({ points, lgaZones, selected, selectedLga, onSelect, onSelectLga, categoryFilter, regionFilter, scope: scopeProp, onScopeChange }) {
   const [statesGeo, setStatesGeo] = useState(null)
   const [lgasGeo, setLgasGeo] = useState(null)
-  const [scope, setScope] = useState('states')
+  const [scopeState, setScopeState] = useState('states')
+  // Controlled/uncontrolled: pass scope+onScopeChange to drive this map's
+  // State/LGA toggle from a parent-level control (e.g. a page-level toggle
+  // that also needs to know which mode is active, like HivWhatIfBudget's
+  // zone-distribution cards) -- falls back to fully-internal state when
+  // those props are omitted, so every existing caller keeps working as-is.
+  const scope = scopeProp ?? scopeState
+  const setScope = onScopeChange ?? setScopeState
   const [hover, setHover] = useState(null)
   const [view, setView] = useState(RISKMAP_NIGERIA_VIEW)
 
@@ -566,7 +585,8 @@ function RiskMap({ points, lgaZones, selected, selectedLga, onSelect, onSelectLg
       const dim = (categoryFilter && categoryFilter !== 'All' && zone !== categoryFilter) ||
                   (regionFilter && regionFilter !== 'All' && regionByState[stName] !== regionFilter)
       const rgb = ZONE_FILL_RGB[zone]
-      return [...rgb, dim ? 55 : 210]
+      const alpha = zone === 'No Data' ? (dim ? 35 : 130) : (dim ? 55 : 210)
+      return [...rgb, alpha]
     }
     const lgaIsSelected = f => selectedLga.length ? selectedLga.includes(lgaKeyFor(f.properties.st, f.properties.lga)) : selected.includes(f.properties.st)
     return [new GeoJsonLayer({
@@ -585,32 +605,47 @@ function RiskMap({ points, lgaZones, selected, selectedLga, onSelect, onSelectLg
 
   return (
     <div>
-      <div style={{ display: 'inline-flex', background: C.panel2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 3, marginBottom: 10 }}>
-        {[['states', 'State view'], ['lgas', 'LGA view']].map(([k, lbl]) => (
-          <button key={k} onClick={() => setScope(k)}
-            style={{ border: 'none', cursor: 'pointer', padding: '5px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 600,
-              fontFamily: 'inherit', background: scope === k ? C.panel : 'transparent', color: scope === k ? C.teal : C.textDim }}>{lbl}</button>
-        ))}
-      </div>
-      <div style={{ position: 'relative', height: 430, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+      {/* Only render this toggle when nobody upstream already controls scope --
+          a controlling parent (scopeProp passed) renders its own page-level
+          toggle instead, so there's exactly one State view/LGA view control
+          on screen, not two that happen to stay in sync. */}
+      {scopeProp === undefined && (
+        <div style={{ display: 'inline-flex', background: C.panel2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 3, marginBottom: 10 }}>
+          {[['states', 'State view'], ['lgas', 'LGA view']].map(([k, lbl]) => (
+            <button key={k} onClick={() => setScope(k)}
+              style={{ border: 'none', cursor: 'pointer', padding: '5px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 600,
+                fontFamily: 'inherit', background: scope === k ? C.panel : 'transparent', color: scope === k ? C.teal : C.textDim }}>{lbl}</button>
+          ))}
+        </div>
+      )}
+      <div style={{ position: 'relative', height: 430, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}`, background: C.panelAlt }}>
         {!ready && <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textFaint, fontSize: 12.5 }}>Loading map…</div>}
         {ready && (
           <DeckGL viewState={view} controller={true} layers={layers} onViewStateChange={e => setView(e.viewState)} style={{ position: 'absolute', inset: 0 }}>
-            <GLMap mapStyle={BLANK_MAP_STYLE} />
+            {/* key forces a remount on theme toggle -- react-map-gl's <Map>
+                only applies mapStyle once on mount, not on prop change, so a
+                fresh instance is the only reliable way to repaint the
+                background colour for Light vs Dark. */}
+            <GLMap key={typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') : 'light'} mapStyle={blankMapStyle()} />
           </DeckGL>
         )}
         {hover?.object && (() => {
           const name = hover.kind === 'state' ? hover.object.properties.st : hover.object.properties.st
           const p = pointByName[name]
           if (hover.kind === 'state' && !p) return null
-          const zone = hover.kind === 'state' ? p.dominant : (lgaZones[lgaKeyFor(hover.object.properties.st, hover.object.properties.lga)]?.zone || 'Not a Hotspot')
+          const lgaZ = hover.kind === 'lga' ? lgaZones[lgaKeyFor(hover.object.properties.st, hover.object.properties.lga)] : null
+          const zone = hover.kind === 'state' ? p.dominant : (lgaZ?.zone || 'Not a Hotspot')
+          const score = hover.kind === 'state' ? p.score : lgaZ?.display
           return (
             <div style={{ position: 'absolute', left: hover.x + 12, top: hover.y + 12, pointerEvents: 'none', background: C.panel, border: `1px solid ${C.border}`,
               borderRadius: 8, padding: '8px 11px', fontSize: 12, boxShadow: '0 8px 24px rgba(15,34,48,.16)', zIndex: 5, minWidth: 140 }}>
               <div style={{ fontWeight: 700, color: C.text, marginBottom: 3 }}>{hover.kind === 'state' ? hover.object.properties.st : hover.object.properties.lga}</div>
               {hover.kind === 'lga' && <div style={{ fontSize: 10.5, color: C.textFaint, marginBottom: 3 }}>{hover.object.properties.st}</div>}
-              <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 12, fontSize: 10.5, fontWeight: 700,
-                background: ZONE_COLORS[zone] + '22', color: ZONE_COLORS[zone] }}>{ZONE_LABELS[zone]}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 12, fontSize: 10.5, fontWeight: 700,
+                  background: (ZONE_COLORS[zone] || '#94a3b8') + '22', color: ZONE_COLORS[zone] || '#94a3b8' }}>{ZONE_LABELS[zone] || 'No Data (unreported)'}</span>
+                {score != null && <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11.5, fontWeight: 700, color: C.text }}>{score.toFixed(1)}</span>}
+              </div>
             </div>
           )
         })()}
@@ -655,7 +690,7 @@ function Sidebar({ page, setPage, collapsed, onToggle }) {
     </div>
   )
 }
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 // `locations` (state names) and `lgas` (LGA keys, "State|||LGA") are both
 // multi-select arrays and mutually exclusive -- the LOCATION filter is
 // either "one or more states" or "one or more LGAs", never a mix, enforced
@@ -1031,7 +1066,7 @@ function useScopedSeries(burden, filters, M) {
 // short padded series forecast-flagged. Fall back to the last row outright
 // rather than showing blank KPIs -- month mode always has real history, so
 // this fallback never triggers there.
-const lastActual = series => [...series].reverse().find(d => !d.forecast) || series[series.length - 1]
+export const lastActual = series => [...series].reverse().find(d => !d.forecast) || series[series.length - 1]
 
 /* ============================== PAGE: OVERVIEW ============================== */
 function OverviewPage({ M, scoped, filters, setFilters }) {
@@ -1540,7 +1575,7 @@ function IPTpPage({ M, scoped, filters, burden }) {
 // model takes over -- replaces the AreaChart used everywhere on this page
 // (an Area's fill made the actual/forecast boundary hard to read at a
 // glance; a plain vs dashed Line makes it explicit).
-function SplitLineChart({ data, dataKey, name, color, height = 270, yTickFmt = fmt }) {
+export function SplitLineChart({ data, dataKey, name, color, height = 270, yTickFmt = fmt }) {
   const split = useMemo(() => withForecastSplit(data, [dataKey]), [data, dataKey])
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -1704,7 +1739,7 @@ export default function ManagerDashboard({ data, variant = 'after', disease = 'm
         .miq-root .sidebarFoot { padding: 12px 8px 4px; border-top: 1px solid ${C.border}; margin-top: 10px; }
 
         .miq-root .miqMain { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; }
-        .miq-root .topbar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: flex-end; padding: 18px 26px; background: ${C.bg}ee; backdrop-filter: blur(6px); border-bottom: 1px solid ${C.border}; flex-wrap: wrap; gap: 12px; }
+        .miq-root .topbar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: flex-end; padding: 18px 26px; background: var(--miq-topbar-blur); backdrop-filter: blur(6px); border-bottom: 1px solid ${C.border}; flex-wrap: wrap; gap: 12px; }
         .miq-root .topTitle { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px; }
         .miq-root .topSub { font-size: 12px; color: ${C.textFaint}; margin-top: 2px; }
         .miq-root .content { padding: 20px 26px 40px; }
@@ -1753,7 +1788,7 @@ export default function ManagerDashboard({ data, variant = 'after', disease = 'm
         .miq-root .tableWrap { overflow-y: auto; }
         .miq-root .dataTable { width: 100%; border-collapse: collapse; font-size: 12px; }
         .miq-root .dataTable th { text-align: left; color: ${C.textFaint}; font-weight: 600; font-size: 10.5px; letter-spacing: 0.3px; padding: 6px 10px; border-bottom: 1px solid ${C.border}; position: sticky; top: 0; background: ${C.panel}; }
-        .miq-root .dataTable td { padding: 7px 10px; border-bottom: 1px solid ${C.border}66; color: ${C.text}; }
+        .miq-root .dataTable td { padding: 7px 10px; border-bottom: 1px solid ${C.border}; color: ${C.text}; }
         .miq-root .dataTable tr:hover td { background: ${C.panelAlt}; }
       `}</style>
 

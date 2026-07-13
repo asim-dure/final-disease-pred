@@ -113,6 +113,7 @@ export default function Benchmarking({ disease, label }) {
   const [stateName, setStateName] = useState('')
   const [target, setTarget] = useState('')
   const [targets, setTargets] = useState([])
+  const [targetDisplayLabel, setTargetDisplayLabel] = useState('')
   const [lgaOptions, setLgaOptions] = useState([])
   const [selectedLgas, setSelectedLgas] = useState([])
   // 'lgas' = stateName's own peer LGAs vs state/national average (original mode).
@@ -128,29 +129,50 @@ export default function Benchmarking({ disease, label }) {
   const [insight, setInsight] = useState(null)
   const [insightLoading, setInsightLoading] = useState(false)
   const [insightErr, setInsightErr] = useState(null)
+  // The indicator/LGA fetch below hits a live, uncached-on-first-request
+  // warehouse query for every NCD/NTD disease (fast once the backend's own
+  // process-lifetime cache is warm, but a genuine ~20s wait on the very
+  // first request after a server restart) -- without this, the indicator
+  // box just showed a blank "—" the whole time, reading as broken instead
+  // of loading.
+  const [optionsLoading, setOptionsLoading] = useState(false)
 
   // load states + default target list once per disease
   useEffect(() => {
+    let stale = false
     setStateName(''); setTarget(''); setTargets([]); setLgaOptions([]); setSelectedLgas([]); setCompareStates([]); setChart(null); setInsight(null)
     fetch(`${API_BASE}/meta?disease=${encodeURIComponent(disease)}`)
       .then(r => r.json())
-      .then(m => { setStates(m.states || []); if (m.states?.length) setStateName(m.states[0]) })
-      .catch(() => setStates([]))
+      .then(m => { if (stale) return; setStates(m.states || []); if (m.states?.length) setStateName(m.states[0]) })
+      .catch(() => { if (!stale) setStates([]) })
+    // Benchmarking isn't remounted (no key={disease}) when the user switches
+    // diseases, so without this guard an in-flight fetch from the PREVIOUS
+    // disease can resolve after the new one already populated real state and
+    // silently wipe it back to [] -- a genuine, intermittent race (not every
+    // switch, only when the old request happens to settle last) that showed
+    // up as "blank, nothing to select" on a seemingly random disease.
+    return () => { stale = true }
   }, [disease])
 
   // load indicator options + LGA list whenever state changes
   useEffect(() => {
     if (!stateName) return
+    let stale = false
+    setOptionsLoading(true)
     fetch(`${API_BASE}/benchmark/options?disease=${encodeURIComponent(disease)}&state_name=${encodeURIComponent(stateName)}`)
       .then(r => r.json())
       .then(d => {
+        if (stale) return
         setTargets(d.targets || [])
         setTarget(d.targets?.[0] || '')
+        setTargetDisplayLabel(d.target_display_label || '')
         setLgaOptions(d.lgas || [])
         setSelectedLgas([])
       })
-      .catch(() => { setTargets([]); setLgaOptions([]) })
+      .catch(() => { if (!stale) { setTargets([]); setLgaOptions([]) } })
+      .finally(() => { if (!stale) setOptionsLoading(false) })
     setCompareStates(s => s.filter(x => x !== stateName))
+    return () => { stale = true }
   }, [disease, stateName])
 
   const fetchStateBenchmark = useCallback((st) =>
@@ -274,9 +296,16 @@ export default function Benchmarking({ disease, label }) {
               </div>
               <div className="select-wrap">
                 <label>Indicator for Comparison</label>
-                <select value={target} onChange={e => setTarget(e.target.value)} style={{ width: '100%' }}>
-                  {targets.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                {targets.length <= 1 ? (
+                  <div style={{ padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-2)',
+                    fontSize: '.86rem', fontWeight: 700, color: optionsLoading ? 'var(--txt-3)' : 'var(--txt-0)' }}>
+                    {optionsLoading ? 'Loading…' : (targetDisplayLabel || targets[0] || '—')}
+                  </div>
+                ) : (
+                  <select value={target} onChange={e => setTarget(e.target.value)} style={{ width: '100%' }}>
+                    {targets.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                )}
               </div>
               <button onClick={runCompare} disabled={!target || loading}
                 style={{ padding: '9px 18px', borderRadius: 8, border: 'none',
@@ -309,9 +338,16 @@ export default function Benchmarking({ disease, label }) {
             <div className="row" style={{ gap: 20, alignItems: 'flex-end', marginTop: 16, flexWrap: 'wrap' }}>
               <div className="select-wrap" style={{ minWidth: 220 }}>
                 <label>Indicator for Comparison</label>
-                <select value={target} onChange={e => setTarget(e.target.value)} style={{ width: '100%' }}>
-                  {targets.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                {targets.length <= 1 ? (
+                  <div style={{ padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-2)',
+                    fontSize: '.86rem', fontWeight: 700, color: optionsLoading ? 'var(--txt-3)' : 'var(--txt-0)' }}>
+                    {optionsLoading ? 'Loading…' : (targetDisplayLabel || targets[0] || '—')}
+                  </div>
+                ) : (
+                  <select value={target} onChange={e => setTarget(e.target.value)} style={{ width: '100%' }}>
+                    {targets.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                )}
               </div>
               <button onClick={runCompare} disabled={!target || loading || !compareStates.length}
                 style={{ padding: '9px 18px', borderRadius: 8, border: 'none',
@@ -327,7 +363,7 @@ export default function Benchmarking({ disease, label }) {
 
       {chart && (
         <Card title="Comparative Benchmarking"
-          sub={`${target} — ${chart.dates.length} months${chart.forecast_start ? ' · includes model forecast tail' : ''}`}>
+          sub={`${targetDisplayLabel || target} — ${chart.dates.length} months${chart.forecast_start ? ' · includes model forecast tail' : ''}`}>
           <CompareChart data={chartData} series={chart._series} height={340}
             splitDate={chart.forecast_start || undefined} splitLabel="Model forecast →" />
           <button onClick={generateInsight} disabled={insightLoading}

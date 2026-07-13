@@ -389,15 +389,92 @@ SOLVER_INTERVENTIONS = {
     "SMC (under-5)":   dict(col="Children <5 yrs who received LLIN",     elasticity=0.30, audience=0.35, per="pop",   ratio=0.17),
 }
 
+# ── HIV unit costs (₦) -- literature-based, cited (NOT a warehouse-native
+# cost table -- disclosed as such in the budget UI, same "GENERIC/INDICATIVE"
+# honesty bar as everywhere else in this build). Sources: ART comprehensive
+# per-patient cost ~$130/yr (PEPFAR-supported programme costing, PMC/PubMed
+# multi-country studies incl. Nigeria); HIV test ~$20-22/client (Nigeria
+# community-based FSW testing cost study, PLOS One); PMTCT test ~$18/client
+# (same family of Nigeria HCT/PMTCT unit-cost literature); VL test ~$20
+# (typical sub-Saharan Africa VL assay costing); PrEP ~$70/person/year
+# (oral PrEP programmatic cost, Kenya/multi-country PrEP costing literature --
+# no Nigeria-specific 2023-2024 figure was found, so this one is the least
+# certain of the five and is labeled as such in the UI).
+HIV_UNIT_COSTS = {
+    "art":           ("ART patient-year", round(130 * USD_NGN)),
+    "hts_testing":   ("HIV test (general population)", round(20 * USD_NGN)),
+    "pmtct_testing": ("PMTCT HIV test", round(18 * USD_NGN)),
+    "vl_monitoring": ("Viral load test", round(20 * USD_NGN)),
+    "msm":           ("PrEP person-year (MSM)", round(70 * USD_NGN)),
+    "pwid":          ("PrEP person-year (PWID)", round(70 * USD_NGN)),
+    "sw":            ("PrEP person-year (Sex Workers)", round(70 * USD_NGN)),
+    "tg":            ("PrEP person-year (Transgender)", round(70 * USD_NGN)),
+}
 
-def _solver_build_params(cases: float, pop: float) -> dict:
+# HIV solver interventions -- same water-filling concave-allocation math as
+# malaria's SOLVER_INTERVENTIONS, adapted to HIV's real levers:
+#   - art/hts_testing/pmtct_testing/vl_monitoring: per="pop", ratio derived
+#     from each driver's REAL current national annualised volume ÷ real
+#     national population (drivers_hiv.py's own national baselines, Jan 2026)
+#     -- "full cost" models an INCREMENTAL scale-up ask (a quarter of one
+#     year's full national delivery cycle at current programme scale, i.e.
+#     the annualised real volume x unit cost, damped x0.25), not "replace
+#     Nigeria's entire existing HIV budget from zero" -- a budget-planning
+#     tool is used to plan NEW/ADDITIONAL spend on top of an already-running
+#     programme, so pricing against the full from-scratch national cost
+#     (~₦300-500bn/yr for ART alone) would make every realistic planning
+#     budget look like it buys almost nothing. Scaled proportionally to
+#     whatever geography (national/state) is selected. pmtct_testing's
+#     max_avert (not its cost ratio -- that would double-count the scoping,
+#     since _solver_build_params already multiplies by the FULL population)
+#     is additionally audience-scoped to the standard ~4% pregnant/
+#     breastfeeding-women population share already used elsewhere in this
+#     project (ross_macdonald.py).
+#   - msm/pwid/sw/tg: per="fixed" (a NEW mode -- see _solver_build_params
+#     below) against each key population's own real, cited size estimate
+#     (export_hiv_kp_socio.py / NACA KP Size Estimation 2023), not a share of
+#     the whole Nigerian population -- ratio=0.6 models a realistic
+#     "Fast-Track"-style ceiling (able to reach up to 60% of the estimated
+#     KP population with a fully-funded PrEP/outreach programme, already a
+#     realistically-scoped incremental ask given KP population sizes are
+#     small relative to the whole country, so no extra damping needed here).
+#     elasticity 0.35 (targeted PrEP/outreach -- larger per-person effect
+#     than general population interventions, WHO PrEP efficacy literature)
+#     x audience (each group's real, cited share of Nigeria's total PLHIV --
+#     see export_hiv_kp_socio.py's audience-weight derivation).
+_INCREMENTAL_DAMPING = 0.25
+HIV_SOLVER_INTERVENTIONS = {
+    "ART continuation":       dict(col="art",           elasticity=0.30, audience=1.00,  per="pop",   ratio=_INCREMENTAL_DAMPING * 1722796 / 230_000_000),
+    "HIV testing (general)":  dict(col="hts_testing",    elasticity=0.15, audience=1.00,  per="pop",   ratio=_INCREMENTAL_DAMPING * (300_000 * 12) / 230_000_000),
+    "PMTCT testing":          dict(col="pmtct_testing",  elasticity=0.15, audience=0.04,  per="pop",   ratio=_INCREMENTAL_DAMPING * (650_000 * 12) / 230_000_000),
+    "VL monitoring":          dict(col="vl_monitoring",  elasticity=0.12, audience=1.00,  per="pop",   ratio=_INCREMENTAL_DAMPING * (1_300_000 * 12) / 230_000_000),
+    "PrEP -- MSM":            dict(col="msm",  elasticity=0.35, audience=0.0789, per="fixed", ratio=0.6, fixed_base=600_000, male_only=True),
+    "PrEP -- PWID":           dict(col="pwid", elasticity=0.35, audience=0.0253, per="fixed", ratio=0.6, fixed_base=441_500),
+    "PrEP -- Sex Workers":    dict(col="sw",   elasticity=0.35, audience=0.0604, per="fixed", ratio=0.6, fixed_base=740_000),
+    "PrEP -- Transgender":    dict(col="tg",   elasticity=0.35, audience=0.0142, per="fixed", ratio=0.6, fixed_base=94_000),
+}
+
+SOLVER_INTERVENTIONS_BY_DISEASE = {"malaria": SOLVER_INTERVENTIONS, "hiv": HIV_SOLVER_INTERVENTIONS}
+UNIT_COSTS_BY_DISEASE = {"malaria": UNIT_COSTS, "hiv": HIV_UNIT_COSTS}
+
+
+def _solver_build_params(cases: float, pop: float, disease: str = "malaria") -> dict:
     """{name: {max_avert, full_cost, col}} from real cases/population for the
-    selected scope, using SOLVER_INTERVENTIONS' elasticity/audience/ratio and
-    the app's own UNIT_COSTS (₦)."""
+    selected scope, using that disease's SOLVER_INTERVENTIONS elasticity/
+    audience/ratio and its own UNIT_COSTS (₦). per="fixed" (HIV key-population
+    levers only) uses the intervention's own fixed_base (a real, cited
+    population-size estimate) instead of the scope's pop/cases."""
+    solver_defs = SOLVER_INTERVENTIONS_BY_DISEASE.get(disease, SOLVER_INTERVENTIONS)
+    unit_costs = UNIT_COSTS_BY_DISEASE.get(disease, UNIT_COSTS)
     p = {}
-    for name, d in SOLVER_INTERVENTIONS.items():
-        unit_cost_ngn = UNIT_COSTS.get(d["col"], (None, 0))[1]
-        base = pop if d["per"] == "pop" else cases
+    for name, d in solver_defs.items():
+        unit_cost_ngn = unit_costs.get(d["col"], (None, 0))[1]
+        if d["per"] == "fixed":
+            base = d["fixed_base"]
+        elif d["per"] == "pop":
+            base = pop
+        else:
+            base = cases
         full_cost = base * d["ratio"] * unit_cost_ngn
         max_avert = cases * d["audience"] * d["elasticity"]
         p[name] = dict(max_avert=max_avert, full_cost=full_cost, col=d["col"])
@@ -453,13 +530,14 @@ def _load_proposals():
 def _save_proposals(items):
     json.dump(items, open(PROPOSALS_FILE, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
 
-def _costs_text(cols):
+def _costs_text(cols, disease: str = "malaria"):
+    unit_costs = UNIT_COSTS_BY_DISEASE.get(disease, UNIT_COSTS)
     lines = []
     for c in cols:
-        if c in UNIT_COSTS:
-            label, cost = UNIT_COSTS[c]
+        if c in unit_costs:
+            label, cost = unit_costs[c]
             lines.append(f'  - "{c}" → {label}, ~₦{cost:,}/unit (${cost/USD_NGN:.3f})')
-    return "\n".join(lines) if lines else "  (use realistic NMEP supply-chain costs)"
+    return "\n".join(lines) if lines else "  (use realistic programme supply-chain costs)"
 
 # SARIMAX forecasts compound error the further out they project -- a sum
 # across a 2030 horizon (Forecast.jsx's "Forecast to 2030") produces
@@ -755,7 +833,7 @@ def budget(req: BudgetReq):
     label = _disease_label(req.disease)
     cfg = dc.DISEASES.get(req.disease, {})
     configured_interventions = cfg.get("interventions", [])
-    has_unit_costs = req.disease == "malaria"   # only malaria has a real ₦ unit-cost table
+    has_unit_costs = req.disease in SOLVER_INTERVENTIONS_BY_DISEASE   # malaria + hiv have a real ₦ unit-cost table
     notes = _dataset_notes(req.disease)
 
     case_reduction = req.base_monthly_cases - req.whatif_monthly_cases
@@ -790,8 +868,24 @@ def budget(req: BudgetReq):
 {notes or f'{label} case data from the Nigeria warehouse, no further structured notes recorded.'}"""
 
     if has_unit_costs and req.interventions:
-        # Malaria, with real selected interventions -- grounded ₦ unit-cost flow (unchanged behaviour).
-        prompt = f"""You are a health economics advisor for Nigeria's National Malaria Elimination Programme (NMEP).
+        # A disease with a REAL ₦ unit-cost table (malaria or hiv) and real
+        # selected interventions -- grounded budget flow. Programme name and
+        # seasonal/delivery-channel language are disease-specific so HIV
+        # content never inherits malaria's NMEP/rainy-season/vector-control
+        # framing (previously hardcoded here regardless of `disease`).
+        if req.disease == "malaria":
+            programme, timing_note, prevention_line = (
+                "Nigeria's National Malaria Elimination Programme (NMEP)",
+                "scale up before the rainy-season peak",
+                "the standard NMEP/WHO prevention measures relevant to the interventions above (vector control, case management, chemoprevention)",
+            )
+        else:
+            programme, timing_note, prevention_line = (
+                f"Nigeria's national {label} programme",
+                "ramp up steadily across the horizon (no seasonal peak applies)",
+                f"the standard WHO/national-programme prevention & care measures relevant to the interventions above for {label}",
+            )
+        prompt = f"""You are a health economics advisor for {programme}.
 
 {about_section}
 
@@ -806,15 +900,15 @@ PLANNED INTERVENTIONS (changes to current levels):
 {interventions_text}
 
 GROUNDED UNIT COSTS:
-{_costs_text(list(req.interventions.keys()))}
+{_costs_text(list(req.interventions.keys()), req.disease)}
 
-MONTH-BY-MONTH MODEL FORECAST (confirmed malaria cases, through {FORECAST_CAP_DATE}):
+MONTH-BY-MONTH MODEL FORECAST ({label} target series, through {FORECAST_CAP_DATE}):
 {month_table}
 
 YOUR TASK — produce a DETAILED, MONTH-BY-MONTH national budget & deployment plan covering ALL {capped_horizon} forecast months above:
 
 1. MONTH-BY-MONTH DEPLOYMENT TABLE — one row per forecast month. For each month give:
-   - units of each intervention to procure/deploy that month (scale up before the rainy-season peak),
+   - units of each intervention to procure/deploy that month ({timing_note}),
    - that month's cost in ₦ and USD,
    - cumulative spend in ₦ and USD,
    - that month's expected cases averted.
@@ -825,9 +919,9 @@ YOUR TASK — produce a DETAILED, MONTH-BY-MONTH national budget & deployment pl
 
 4. GEOGRAPHIC PRIORITISATION — top 5–6 highest-burden states to fund first, with an indicative share of budget each.
 
-5. PROCUREMENT & LOGISTICS TIMELINE — lead times, pre-positioning before rainy season (Jun–Oct), cold-chain/storage notes.
+5. PROCUREMENT & LOGISTICS TIMELINE — lead times, pre-positioning, supply-chain/storage notes.
 
-6. PREVENTION & CONTROL MEASURES — the standard NMEP/WHO prevention measures relevant to the interventions above (vector control, case management, chemoprevention), and how this budget operationalises them.
+6. PREVENTION & CONTROL MEASURES — {prevention_line}, and how this budget operationalises them.
 
 7. RISK FLAGS — supply chain, absorption capacity, financing gaps, caveats.
 
@@ -944,8 +1038,10 @@ def budget_optimize(req: OptimizeReq):
     note above _solver_build_params for why: an LLM was shown to leave 15-20%
     of budget unspent, skip cost-effective options, and misjudge its own
     plan's impact by ~13%, versus the solver's provably-optimal allocation)."""
-    if req.disease != "malaria":
+    if req.disease not in SOLVER_INTERVENTIONS_BY_DISEASE:
         raise HTTPException(400, f"Budget planning requires unit costs, not yet configured for '{req.disease}'")
+    disease_solver = SOLVER_INTERVENTIONS_BY_DISEASE[req.disease]
+    label = _disease_label(req.disease)
 
     # baseline forecast (no interventions) for context -- capped at FORECAST_CAP_DATE
     # so the optimiser never plans/totals against an implausible multi-year sum.
@@ -960,7 +1056,7 @@ def budget_optimize(req: OptimizeReq):
     scope = req.state_name if req.level == "state" else "Nigeria (national)"
 
     # ── the actual decision: solved, not asked of the LLM ───────────────────
-    params = _solver_build_params(base_avg, pop)
+    params = _solver_build_params(base_avg, pop, req.disease)
     solved = _solver_allocate(params, req.budget_ngn)
     # % of current level, for the UI's existing sliders / for the user to
     # further hand-tune afterward through the normal elasticity mechanism --
@@ -968,7 +1064,7 @@ def budget_optimize(req: OptimizeReq):
     # re-fit, so it's an honest "how much of the addressable gap this budget
     # closes", not a fabricated number.
     interventions = {}
-    for name, d in SOLVER_INTERVENTIONS.items():
+    for name, d in disease_solver.items():
         fc = params[name]["full_cost"]
         cov = (solved["spend"][name] / fc) if fc > 0 else 0.0
         pct = round(max(0.0, min(200.0, cov * 100.0)), 1)
@@ -993,19 +1089,22 @@ def budget_optimize(req: OptimizeReq):
             alloc_lines = "\n".join(
                 f'  - "{d["col"]}": ₦{solved["spend"][name]:,.0f} (${solved["spend"][name]/USD_NGN:,.0f}) '
                 f'-> {100*solved["spend"][name]/params[name]["full_cost"] if params[name]["full_cost"] else 0:.0f}% of full coverage'
-                for name, d in SOLVER_INTERVENTIONS.items()
+                for name, d in disease_solver.items()
             )
-            prompt = f"""You are writing up a malaria budget plan for Nigeria's NMEP. A mathematical
+            programme = "Nigeria's National Malaria Elimination Programme (NMEP)" if req.disease == "malaria" else f"Nigeria's national {label} programme"
+            metric_label = "confirmed malaria cases" if req.disease == "malaria" else f"{label} target metric"
+            prompt = f"""You are writing up a {label} budget plan for {programme}. A mathematical
 optimiser (an exhaustive concave-resource-allocation solver maximising cases
 averted under the budget constraint) already DECIDED the intervention mix
 below. Do NOT change, second-guess, or re-allocate it -- your only job is to
-write the narrative plan around these already-optimal numbers.
+write the narrative plan around these already-optimal numbers. Stay entirely
+within {label} -- do not reference any other disease's programmes, seasons, or interventions.
 
 Geographic scope: {scope}
 Total budget: ₦{req.budget_ngn:,.0f} (${req.budget_ngn/USD_NGN:,.0f})
 Forecast horizon: {capped_horizon} months, through {FORECAST_CAP_DATE}
 Population: {pop:,.0f}
-Baseline forecast (no new action): ~{base_avg:,.0f} confirmed cases/month
+Baseline forecast (no new action): ~{base_avg:,.0f} {metric_label}/month
 
 OPTIMISER'S ALLOCATION (use exactly these figures verbatim):
 {alloc_lines}
@@ -1024,7 +1123,7 @@ Write, in this order: (1) one line stating this allocation comes from an exhaust
         # The solver's numbers stand on their own even without AI narration.
         lines = "\n".join(
             f'- **{name}** (`{d["col"]}`): ₦{solved["spend"][name]:,.0f} (${solved["spend"][name]/USD_NGN:,.0f})'
-            for name, d in SOLVER_INTERVENTIONS.items())
+            for name, d in disease_solver.items())
         plan = (f"**Optimiser-selected allocation** — ₦{solved['total_spend']:,.0f} "
                 f"(${solved['total_spend']/USD_NGN:,.0f}) of the ₦{req.budget_ngn:,.0f} budget:\n\n{lines}\n\n"
                 f"**Projected impact:** ~{solved['avert']:,.0f} cases averted/month "
@@ -1153,14 +1252,48 @@ class BenchmarkReq(BaseModel):
     self_lga: Optional[str] = None  # the "home" LGA the user is benchmarking, if any
 
 
+_LGA_SERIES_CACHE: dict = {}
+
+
 def _fetch_lga_series(disease: str, target: str) -> pd.DataFrame:
     """[state, lga, year, month, value] for every LGA nationally -- the
-    common input both the chart data and the indicator-options list need."""
+    common input both the chart data and the indicator-options list need.
+
+    Cached per (disease, target) for the life of the process: this result is
+    IDENTICAL regardless of state_name (state filtering happens client-side
+    in Python after the fetch, both here and in benchmark_options below), so
+    every state click / every disease switch was re-running the exact same
+    live warehouse query from scratch -- 19-21s for a facility-level NCD
+    indicator, easily long enough that the Comparative Benchmarking tab
+    looked permanently blank/broken to anyone who didn't wait that long.
+    Same cache-for-process-lifetime pattern already used by
+    etl_warehouse_common._POP_LOOKUP_CACHE for the same reason."""
+    cache_key = (disease, target)
+    if cache_key in _LGA_SERIES_CACHE:
+        return _LGA_SERIES_CACHE[cache_key]
+    result = _fetch_lga_series_uncached(disease, target)
+    _LGA_SERIES_CACHE[cache_key] = result
+    return result
+
+
+def _fetch_lga_series_uncached(disease: str, target: str) -> pd.DataFrame:
     if disease == "malaria":
         df = get_df()
         if target not in df.columns:
             raise HTTPException(400, f"Unknown target '{target}' for malaria")
         return df[["state", "lga", "year", "month", target]].rename(columns={target: "value"})
+    cfg = dc.DISEASES.get(disease, {})
+    # A disease's own forecast_target can be a DERIVED label (e.g. HIV's "HIV
+    # positive tests (HTS_TST_POS, NDARS Total Male+Female)") that is never
+    # itself a row in dim_indicator_master -- only its forecast_target_components
+    # are real indicator names. Passing the derived label straight through
+    # raised "Indicator(s) [...] not found", which silently emptied the
+    # Comparative Benchmarking dropdown (the frontend's fetch .catch() swallowed
+    # the error). Resolve to the real component names + system_id whenever the
+    # requested target matches this disease's configured forecast_target.
+    if target == cfg.get("forecast_target"):
+        fetch_names = cfg.get("forecast_target_components", target)
+        return ewc.fetch_fact_series(disease, fetch_names, level="lga", system_id=cfg.get("forecast_target_system_id"))
     return ewc.fetch_fact_series(disease, target, level="lga")
 
 
@@ -1175,7 +1308,8 @@ def benchmark_options(disease: str = "malaria", state_name: str = ""):
     target = targets[0]
     lga_df = _fetch_lga_series(disease, target)
     lgas = sorted(lga_df[lga_df["state"] == state_name]["lga"].dropna().unique().tolist()) if state_name else []
-    return {"targets": targets, "lgas": lgas}
+    display_label = dc.DISEASES.get(disease, {}).get("target_display_label")
+    return {"targets": targets, "lgas": lgas, "target_display_label": display_label}
 
 
 def _reseasonalize(hist_dates, hist_vals, fc_dates, fc_vals):

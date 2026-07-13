@@ -5,10 +5,19 @@
 // map?" A blank background-only style means MapLibre renders nothing but a
 // flat colour; the ONLY geography visible is whatever this app's own
 // GeoJsonLayer (Nigeria's real state/LGA boundaries) draws on top of it.
-export const BLANK_MAP_STYLE = {
-  version: 8,
-  sources: {},
-  layers: [
-    { id: 'background', type: 'background', paint: { 'background-color': '#eef2f6' } },
-  ],
+//
+// A function (not a static object) purely so the background colour can
+// follow the current Light/Dark theme -- reads the same data-theme attribute
+// styles.css's :root[data-theme='dark'] selector keys off, no React context
+// needed for one cosmetic paint colour. Re-evaluated on every render (cheap,
+// tiny object), so toggling the theme updates it immediately.
+export function blankMapStyle() {
+  const dark = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark'
+  return {
+    version: 8,
+    sources: {},
+    layers: [
+      { id: 'background', type: 'background', paint: { 'background-color': dark ? '#141b28' : '#eef2f6' } },
+    ],
+  }
 }

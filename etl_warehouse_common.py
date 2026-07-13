@@ -128,15 +128,37 @@ def fetch_fact_series(disease_id: str, indicator_name, level: str = "lga",
     # before aggregating -- a no-op for indicators that have no duplicates
     # (verified: HTS_TST_POS, Hypertension New Cases, all of TB are already
     # 1:1 row-to-hashkey and unaffected by this change).
+    # clean_f: a handful of single facility-month rows are data-entry sentinel
+    # garbage, not real reports -- verified live: a single Sokoto/Gudu
+    # Hypertension row of 666,666,671, a single Rivers/Asari-Toru Diabetes row
+    # of 99,999,992, a single Imo/Isu Arthritis row of 1,111,111,111 (all
+    # obvious repeating-digit typos/placeholders vs every other facility's
+    # value for the same indicator sitting in the hundreds-to-low-thousands).
+    # Each one alone was enough to make a national monthly total look like a
+    # 300M-case outbreak. Filtering any row over 50x that indicator's own
+    # p99 (with a 1000 floor so sparse/low-volume indicators aren't
+    # over-filtered) drops exactly these sentinel rows without touching any
+    # real facility's legitimately high report.
     sql = f"""
         with dedup_f as (
             select distinct on (f.hashkey) f.*
             from {fact_table} f
             join public.dim_indicator_master d on d.indicator_key = f.indicator_key
             where d.indicator_name = ANY(:names) and f.year is not null and f.month is not null{where_sysid}
+        ),
+        bounds as (
+            select indicator_key, percentile_cont(0.99) within group (order by indicator_value) as p99
+            from dedup_f
+            group by indicator_key
+        ),
+        clean_f as (
+            select f.*
+            from dedup_f f
+            join bounds b on b.indicator_key = f.indicator_key
+            where f.indicator_value <= greatest(b.p99 * 50, 1000)
         )
         select {select_cols}, f.year, f.month, {agg_fn}(f.indicator_value) as value
-        from dedup_f f
+        from clean_f f
         join public.dim_geo_location_master g on g.geo_admin_location_key = f.geo_admin_location_key
         where g.geo_admin_level2_name is not null
         group by {raw_cols}, f.year, f.month

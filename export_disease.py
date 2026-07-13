@@ -258,7 +258,28 @@ def export_one(disease_id: str):
         json.dump(lgas_rows, f, ensure_ascii=False)
 
     # ── 3. hotspots.json + burden.json (precomputed hotspot table snapshot) ──
-    hot = ewc.fetch_hotspot(disease_id)
+    # Diseases with no bespoke ML hotspot-prediction table (hotspot_table is
+    # None/absent in disease_config.py -- true for every disease that has
+    # ONLY a case-count target and nothing else) get a snapshot derived
+    # directly from the same fact-table data already fetched for forecasting
+    # above, instead of requiring a real hotspot table to exist: the LATEST
+    # actually-reported month's case count per LGA. has_score/has_zone stay
+    # False for these (set in disease_config.py), so no score/zone value is
+    # fabricated here -- burden_score/zone_for_score below compute both
+    # purely from case volume, same "volume_trend" formula every other
+    # score/zone-less disease in this file already uses.
+    if cfg.get("hotspot_table"):
+        hot = ewc.fetch_hotspot(disease_id)
+    elif not fact_lga.empty:
+        lga_agg_all = _agg_monthly(fact_lga, ["state", "lga"])
+        latest_per_lga = lga_agg_all.sort_values("date").groupby(["state", "lga"], as_index=False).last()
+        hot = latest_per_lga.assign(
+            year=latest_per_lga["date"].str[:4].astype(int),
+            month=latest_per_lga["date"].str[5:7].astype(int),
+            score=np.nan, zone=None,
+        )[["state", "lga", "year", "month", "score", "zone", "value"]]
+    else:
+        hot = pd.DataFrame(columns=["state", "lga", "year", "month", "score", "zone", "value"])
     hot = ewc.join_population(hot, year_col="year")
     has_score = cfg["has_score"]
     rank_col = "score" if has_score else "value"
@@ -360,10 +381,17 @@ def export_one(disease_id: str):
                 arr = hist_lgas.setdefault(key, {
                     "burden_score": [None] * len(history_dates),
                     "zone": [None] * len(history_dates),
+                    "value": [None] * len(history_dates),
                     "forecast": [None] * len(history_dates),
                 })
                 arr["burden_score"][i] = round(float(r["burden_score"]), 2)
                 arr["zone"][i] = r["zone"]
+                # Raw case value per month, not just the derived burden_score --
+                # needed so the frontend can recompute burden_score with a
+                # lever-adjusted value (What-If levers) without re-fetching
+                # anything, using the exact same volume_trend formula
+                # (ewc.burden_score) ported to JS.
+                arr["value"][i] = None if pd.isna(r["value"]) else round(float(r["value"]), 2)
                 arr["forecast"][i] = bool(r["forecast"])
 
         # state-level history rollup: SUM each state's LGA values per date
