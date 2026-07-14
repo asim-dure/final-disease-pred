@@ -1,0 +1,555 @@
+// Smart Search -- dark/greenish theme matching the predictive dashboards
+// (final_disease_pred): dark navy panels (#0b0f14 / #141b28) with teal/green
+// accents (#0d9488 / #2dd4bf). Colours are hardcoded here because this app
+// (console-react) doesn't define the predictive dashboard's --miq-* vars.
+
+.smart-search-page {
+  --ss-bg: #0b0f14;
+  --ss-panel: #141b28;
+  --ss-panel-alt: #1a2230;
+  --ss-panel-2: #111722;
+  --ss-border: #232d3d;
+  --ss-border-light: #2e3a4d;
+  --ss-text: #eef3f8;
+  --ss-text-dim: #a6b2c2;
+  --ss-text-faint: #6b7789;
+  --ss-accent: #2dd4bf;       // bright teal for accents on dark
+  --ss-accent-deep: #0d9488;  // deep teal
+  --ss-accent-grad: linear-gradient(135deg, #0d9488, #2dd4bf);
+
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px);
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  font-size: 15px;
+  color: var(--ss-text);
+  background: var(--ss-bg);
+  font-family: 'Inter', system-ui, sans-serif;
+
+  // ── Top bar ───────────────────────────────────────────────
+  .smart-search-topbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--ss-border);
+    background: var(--ss-panel);
+  }
+
+  .smart-search-topbar-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #04231f;
+    background: var(--ss-accent-grad);
+    flex-shrink: 0;
+  }
+
+  .smart-search-topbar-title {
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--ss-text);
+  }
+
+  .smart-search-topbar-sub {
+    font-size: 13px;
+    color: var(--ss-text-dim);
+    font-weight: 500;
+  }
+
+  // ── Chat log ──────────────────────────────────────────────
+  .smart-search-log {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 24px 0;
+    background: var(--ss-bg);
+  }
+
+  .smart-search-empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0 24px;
+  }
+
+  .smart-search-empty-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    color: #04231f;
+    background: var(--ss-accent-grad);
+    margin-bottom: 18px;
+  }
+
+  .smart-search-empty-title {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    color: var(--ss-text);
+  }
+
+  .smart-search-empty-sub {
+    font-size: 15px;
+    color: var(--ss-text-dim);
+    max-width: 460px;
+    font-weight: 500;
+  }
+
+  .smart-search-turn {
+    max-width: 920px;
+    margin: 0 auto 4px;
+    padding: 0 24px;
+  }
+
+  // ── Message rows / bubbles ────────────────────────────────
+  .smart-search-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+
+    &.is-user {
+      justify-content: flex-end;
+    }
+
+    &.is-bot {
+      justify-content: flex-start;
+    }
+  }
+
+  .smart-search-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    color: #04231f;
+    background: var(--ss-accent-grad);
+    flex-shrink: 0;
+  }
+
+  .smart-search-bot-content {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .smart-search-bubble {
+    padding: 13px 17px;
+    border-radius: 18px;
+    font-size: 15.5px;
+    font-weight: 600;
+    line-height: 1.5;
+    max-width: 640px;
+    word-break: break-word;
+
+    &.is-user {
+      background: var(--ss-accent-grad);
+      color: #04231f;
+      font-weight: 700;
+      border-bottom-right-radius: 6px;
+    }
+
+    &.is-bot {
+      background: var(--ss-panel-alt);
+      color: var(--ss-text);
+      border: 1px solid var(--ss-border);
+      border-bottom-left-radius: 6px;
+      align-self: flex-start;
+
+      b {
+        font-weight: 800;
+        color: var(--ss-accent);
+      }
+    }
+  }
+
+  .smart-search-typing {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ss-text-dim);
+  }
+
+  // ── Result cards grid ─────────────────────────────────────
+  .smart-search-match-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  .smart-search-match-card {
+    padding: 0;
+    overflow: hidden;
+    border-radius: 14px;
+    // White outline so each option box stands apart from the dark background.
+    border: 1.5px solid rgba(255, 255, 255, 0.85);
+    background: var(--ss-panel);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+      border-color: var(--ss-accent);
+    }
+
+    .ant-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 0;
+      width: 100%;
+    }
+  }
+
+  .smart-search-thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--ss-panel-2);
+    overflow: hidden;
+    margin: 10px 10px 0;
+    width: calc(100% - 20px);
+    border-radius: 10px;
+    // White outline so the (often dark) chart image doesn't merge into the
+    // dark card background.
+    border: 1.5px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+    }
+  }
+
+  .smart-search-thumb-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    color: var(--ss-accent);
+  }
+
+  .smart-search-match-body {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    background: var(--ss-panel);
+  }
+
+  .smart-search-match-title {
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 1.3;
+    color: var(--ss-text);
+  }
+
+  .smart-search-match-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  // ── Create-your-own-chart flow ────────────────────────────
+  .smart-search-create-cta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--ss-text-dim);
+    font-weight: 500;
+  }
+
+  .smart-search-create-btn {
+    background: transparent;
+    color: var(--ss-accent);
+    border: 1.5px solid var(--ss-accent-deep);
+    border-radius: 20px;
+    font-weight: 700;
+    height: 36px;
+
+    &:hover {
+      background: rgba(45, 212, 191, 0.12) !important;
+      color: var(--ss-accent) !important;
+      border-color: var(--ss-accent) !important;
+    }
+  }
+
+  .smart-search-create-or {
+    font-size: 13px;
+  }
+
+  .smart-search-create-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .smart-search-indicator-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 640px;
+  }
+
+  .smart-search-indicator-chip {
+    text-align: left;
+    padding: 11px 15px;
+    border-radius: 12px;
+    border: 1.5px solid var(--ss-border-light);
+    background: var(--ss-panel-alt);
+    color: var(--ss-text);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease, transform 0.1s ease;
+
+    &:hover {
+      border-color: var(--ss-accent);
+      background: rgba(45, 212, 191, 0.1);
+      transform: translateX(2px);
+    }
+  }
+
+  .smart-search-chartbox {
+    border: 1.5px solid rgba(255, 255, 255, 0.85);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--ss-panel);
+    max-width: 760px;
+  }
+
+  .smart-search-chartbox-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--ss-panel-alt);
+    border-bottom: 1px solid var(--ss-border);
+  }
+
+  .smart-search-chartbox-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .smart-search-chartbox-title {
+    font-weight: 800;
+    font-size: 16px;
+    color: var(--ss-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    line-height: 1.2;
+  }
+
+  .smart-search-chartbox-sub {
+    font-size: 12px;
+    color: var(--ss-text-dim);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .smart-search-chartbox-body {
+    height: 380px;
+    padding: 8px;
+  }
+
+  // ── Composer / input bar ──────────────────────────────────
+  .smart-search-bar {
+    flex-shrink: 0;
+    padding: 16px 24px 22px;
+    background: var(--ss-panel);
+    border-top: 1px solid var(--ss-border);
+  }
+
+  .smart-search-inputwrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 8px 8px 8px 20px;
+    border: 1.5px solid var(--ss-border-light);
+    border-radius: 30px;
+    background: var(--ss-panel-alt);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+    &:focus-within {
+      border-color: var(--ss-accent);
+      box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18);
+    }
+  }
+
+  // Bigger, clearly-visible input text on the dark composer.
+  .smart-search-input {
+    flex: 1;
+    background: transparent !important;
+
+    &.ant-input,
+    input.ant-input,
+    input {
+      font-size: 17px !important;
+      font-weight: 600 !important;
+      color: var(--ss-text) !important;
+      background: transparent !important;
+      padding: 6px 0 !important;
+      line-height: 1.5;
+    }
+
+    // Placeholder in light gray, whether .smart-search-input is the <input>
+    // itself (plain Input) or wraps one.
+    &::placeholder,
+    &.ant-input::placeholder,
+    input::placeholder {
+      color: var(--ss-text-dim) !important;
+      font-weight: 500;
+      opacity: 1;
+    }
+  }
+
+  .smart-search-send {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    background: var(--ss-accent-deep);
+    border-color: var(--ss-accent-deep);
+
+    &:hover:not(:disabled) {
+      background: var(--ss-accent) !important;
+      border-color: var(--ss-accent) !important;
+    }
+  }
+}
+
+// ── Overlay for the selected match's live embed ─────────────
+// position: fixed so it covers the whole viewport regardless of page width.
+// Maximize toggles the panel between a large centered window and near-
+// fullscreen (fixed sizes, so both clearly resize).
+.smart-search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(3, 7, 11, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.smart-search-overlay-panel {
+  display: flex;
+  flex-direction: column;
+  width: 80vw;
+  height: 78vh;
+  max-width: 1200px;
+  background: #141b28;
+  border: 1px solid #232d3d;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  transition: width 0.18s ease, height 0.18s ease, max-width 0.18s ease;
+
+  &.is-maximized {
+    width: 98vw;
+    height: 94vh;
+    max-width: none;
+  }
+}
+
+.smart-search-overlay-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #1a2230;
+  border-bottom: 1px solid #232d3d;
+}
+
+.smart-search-overlay-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: #eef3f8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smart-search-overlay-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+
+  .ant-btn-text {
+    color: #a6b2c2;
+
+    &:hover {
+      color: #2dd4bf !important;
+      background: rgba(45, 212, 191, 0.1) !important;
+    }
+  }
+}
+
+.smart-search-overlay-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: #0b0f14;
+}
+
+.smart-search-overlay-chart {
+  padding: 12px;
+}
+
+.smart-search-embed-loading {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #a6b2c2;
+}
+
+.smart-search-embed {
+  width: 100%;
+  height: 100%;
+
+  iframe {
+    border: none;
+  }
+}

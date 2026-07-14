@@ -1,0 +1,12 @@
+# Secrets
+.env
+
+# Generated at runtime -- rebuilt by the crawlers, not source
+chart_metadata.parquet
+thumbnails/
+thumbnails_visual/
+*.log
+
+# Python
+__pycache__/
+*.pyc
